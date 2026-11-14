@@ -38,6 +38,8 @@ Set these Render environment variables. Keep the values in Render's secret setti
 
 After schema and data verification, bootstrap **one** real administrator. GitHub's manual **Provision first administrator** workflow uses an environment named `neon-admin` with secrets `DATABASE_URL` (pooled URL), `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_NAME`, and `BOOTSTRAP_ADMIN_PASSWORD`. The password is never a command-line argument. The script refuses to create another admin once one non-demo administrator exists. Remove the bootstrap secrets after the workflow succeeds, sign in, and enable MFA. Later staff use the authorized invitation flow.
 
+After validating the imported records and signing in as the real administrator, run the manual **Disable imported Neon demo credentials** workflow. Add `DIRECT_URL` for the same Neon branch to the protected `neon-admin` environment. This revokes demo sessions and tokens and disables demo passwords and MFA without deleting historical users, complaints, notes, or audit relationships. Public mode already rejects demo logins; this step removes their usable credential material from Neon. Remove the one-time workflow secrets when finished.
+
 ## Vercel frontend
 
 Import the same repository into Vercel with **Root Directory = `frontend`**, Framework Preset = **Vite**, Build Command = `npm run build`, Output Directory = `dist`. Set only `NAGRIKOS_RENDER_ORIGIN=https://YOUR-RENDER-SERVICE.onrender.com` as the backend routing variable in the Vercel production environment. Use the exact bare HTTPS origin; `frontend/vercel.mjs` refuses missing/unsafe values and proxies `/api/*` before the SPA fallback. Do **not** set `VITE_API_BASE`, `DATABASE_URL`, `DIRECT_URL`, or `BREVO_API_KEY` in Vercel.
