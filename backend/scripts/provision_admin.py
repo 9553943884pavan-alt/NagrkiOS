@@ -25,12 +25,18 @@ def main():
     if not 2<=len(name)<=100:
         parser.error('Name must be 2 to 100 characters')
     email=canonical(args.email)
-    password=getpass.getpass('New administrator password: ')
-    if password != getpass.getpass('Confirm password: '):
-        parser.error('Passwords do not match')
+    # A one-time environment secret allows a manually triggered CI bootstrap.
+    # Interactive local provisioning still confirms the password twice.
+    password=os.getenv('NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD')
+    if password is None:
+        password=getpass.getpass('New administrator password: ')
+        if password != getpass.getpass('Confirm password: '):
+            parser.error('Passwords do not match')
     password_policy(password)
     initialize()
     with connect() as db:
+        if db.execute("SELECT 1 FROM users WHERE role='admin' AND is_demo=0 LIMIT 1").fetchone():
+            parser.error('A public administrator already exists; use a staff invitation')
         if db.execute('SELECT 1 FROM users WHERE email_canonical=?', (email,)).fetchone():
             parser.error('Account already exists')
         db.execute('INSERT INTO users(name,email,email_canonical,email_verified_at,password_hash,role,created_at,is_demo) '

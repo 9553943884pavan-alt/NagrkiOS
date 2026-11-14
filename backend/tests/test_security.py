@@ -17,6 +17,9 @@ PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv('DATABASE_PATH', str(tmp_path/'private'/'db.sqlite3'))
     monkeypatch.setattr('app.main.UPLOAD_DIR', tmp_path/'private'/'uploads')
+    monkeypatch.setenv('BREVO_API_KEY', 'test-only-key')
+    monkeypatch.setenv('MAIL_FROM', 'security@example.org')
+    monkeypatch.setattr('app.account.send_mail', lambda *_args: None)
     with TestClient(app) as c:
         yield c
 

@@ -10,7 +10,8 @@ flowchart TB
   end
 
   Vite["Vite development server<br/>same-origin /api proxy"]
-  PublicHost["HTTPS reverse proxy and static React<br/>public deployment configuration"]
+  Vercel["Vercel HTTPS static React<br/>same-origin /api rewrite"]
+  Render["Render Free HTTPS FastAPI<br/>public mode"]
 
   subgraph Backend["FastAPI application"]
     Guard["Origin, CORS, CSRF<br/>and session-cookie checks"]
@@ -20,32 +21,35 @@ flowchart TB
     Heuristics["Deterministic mock AI<br/>classification, urgency, ETA"]
   end
 
-  subgraph Persistence["Local persistence"]
-    DB[(SQLite database)]
+  subgraph Persistence["Persistence"]
+    DB[(SQLite local/demo database)]
+    PG[(Neon PostgreSQL<br/>pooled application URL)]
+    Direct["Direct Neon URL<br/>Alembic and verified import"]
     Photos["Private photo files<br/>backend/uploads"]
     MFAKey["TOTP encryption key<br/>environment or local key file"]
   end
 
-  SMTP["SMTP with STARTTLS<br/>public mode"]
-  MailSink["Development mail sink<br/>SQLite, loopback only"]
+  Brevo["Brevo HTTPS Transactional Email API<br/>verified sender"]
   PasswordCheck["Pwned Passwords range API<br/>public password checks"]
 
   React --> Vite --> Guard
-  React -.-> PublicHost -.-> Guard
+  React -.-> Vercel -.-> Render -.-> Guard
   Lite --> Guard
   Guard --> Account
   Guard --> Scope --> Cases
   Cases --> Heuristics
   Cases --> DB
+  Cases --> PG
   Cases --> Photos
   Account --> DB
+  Account --> PG
+  Direct --> PG
   Account --> MFAKey
-  Account --> SMTP
-  Account --> MailSink
+  Account --> Brevo
   Account --> PasswordCheck
 ```
 
-The Vite proxy is for local React development. The no-install UI is served at `/` with assets under `/lite/`. A public React deployment must serve the frontend and `/api` from the same HTTPS origin through deployment infrastructure. SMTP and the external password check apply in public mode; the local mail sink applies only in demo mode. No cloud database or storage service is part of this architecture.
+The Vite proxy is for local React development. In the planned hosted layout, Vercel serves React and rewrites `/api` to Render so the browser sees one HTTPS origin; [the deployment guide](RENDER_VERCEL_DEPLOYMENT.md) gives the exact settings. The no-install UI is served at `/` with assets under `/lite/` on FastAPI. SQLite remains the local/demo backend; PostgreSQL is selected by `DATABASE_URL` in public mode. PostgreSQL startup checks the Alembic revision and never seeds demo data. All runtime account email uses Brevo HTTPS when `BREVO_API_KEY` and `MAIL_FROM` are configured; tests stub that request. Photo bytes remain in local private storage and are not durable on Render Free.
 
 ## Trust and account flow
 
@@ -69,7 +73,7 @@ Account logic lives in [account.py](../backend/app/account.py), [auth.py](../bac
 | Dashboard | Own submissions | Department desk | Global overview |
 | Insights, department analytics, CSV export | No | No | Yes |
 | Invite staff | No | No | Yes, after reauthentication |
-| Reset synthetic data | No | No | Demo mode only |
+| Reset synthetic data | No | No | SQLite demo mode only |
 
 The backend applies citizen ownership and officer department filters in SQL queries and individual-record checks. Similar-case results, attachment access, notes, officer lists, and reports also respect these boundaries. Frontend routes mirror the permissions for navigation; they are not the authorization boundary.
 
@@ -81,10 +85,10 @@ The backend applies citizen ownership and officer department filters in SQL quer
 | `account_tokens`, `auth_challenges`, `recovery_codes`, `staff_invitations` | Hashed verification/reset tokens, bounded MFA challenges, hashed one-time codes, authorized staff provisioning |
 | `complaints`, `history`, `notes`, `attachments` | Grievance records, activity, follow-ups, and photo ownership metadata |
 | `backend/uploads` | Private photo bytes; access goes through FastAPI ownership and case-scope checks |
-| `mail_outbox` | Local development mail sink; unavailable in public mode |
+| `mail_outbox` | Retained legacy table for data preservation; no runtime writer or reader |
 | `backend/app/ai.py` | Deterministic heuristic outputs for classification, urgency, ETA, and illustrative image hints; no production ML model |
 
-SQLite migrations in [db.py](../backend/app/db.py) are additive. [migrate_auth_v5.py](../backend/scripts/migrate_auth_v5.py) makes a backup before applying them and checks database integrity. Existing users, cases, notes, files, history, and compatible sessions are preserved; credential and MFA changes revoke affected sessions. A later PostgreSQL or cloud-storage migration would be separate work.
+SQLite migrations in [db.py](../backend/app/db.py) remain additive. PostgreSQL schema changes use [Alembic](../backend/migrations/versions/20261114_01_initial.py) over `DIRECT_URL`; the FastAPI app uses a small SQLAlchemy/psycopg pool over `DATABASE_URL`. [migrate_sqlite_to_postgres.py](../backend/scripts/migrate_sqlite_to_postgres.py) snapshots SQLite and verifies every imported row in a transaction. [NEON_POSTGRESQL.md](NEON_POSTGRESQL.md) describes setup, validation, and rollback. Cloud object storage is separate work.
 
 ## API surface
 
@@ -96,7 +100,6 @@ SQLite migrations in [db.py](../backend/app/db.py) are additive. [migrate_auth_v
 | `/api/auth/me`, `/api/auth/logout`, `/api/auth/security`, `/api/auth/password` | Current session and account security |
 | `/api/auth/mfa/setup`, `/api/auth/mfa/enable`, `/api/auth/mfa/cancel`, `/api/auth/mfa/disable` | Authenticator enrollment, confirmation, cancellation, and removal |
 | `/api/auth/staff-invitations` | Administrator only, with current-password reauthentication |
-| `/api/auth/dev-mailbox` | Loopback demo mode only |
 | `/api/complaints`, `/api/complaints/{id}`, `/api/complaints/{id}/notes` | Role-scoped grievance workflow |
 | `/api/attachments`, `/api/attachments/{filename}` | Private photo upload and authorized retrieval |
 | `/api/citizen/overview`, `/api/officer/overview` | Citizen and department dashboards |
@@ -104,14 +107,14 @@ SQLite migrations in [db.py](../backend/app/db.py) are additive. [migrate_auth_v
 | `/api/dashboard`, `/api/insights`, `/api/departments`, `/api/export/complaints.csv` | Administrator reporting |
 | `/api/ai/analyze` | Authenticated heuristic preview; similar cases filtered by role |
 | `/api/health`, `/api/meta` | Public health and UI metadata |
-| `/api/admin/reset-demo` | Demo administrator only; destructive and revokes sessions |
+| `/api/admin/reset-demo` | SQLite demo administrator only; unavailable with PostgreSQL |
 
 ## Runtime modes
 
 | | Local demo | Public configuration |
 | --- | --- | --- |
 | Accounts | Seeds synthetic identities only for an empty database | No seeded accounts or demo credential exposure |
-| Email | Local SQLite sink, readable only from loopback | Configured SMTP delivery with STARTTLS |
+| Email | Brevo HTTPS when configured; otherwise signup/recovery unavailable | Brevo HTTPS required |
 | Password screening | Local common-password blocklist | Blocklist plus breached-password range check |
 | Cookies and transport | Local HTTP development settings | Secure cookies, HTTPS public URL, explicit origins, persistent TOTP key |
 | API documentation | Local development access | Disabled |

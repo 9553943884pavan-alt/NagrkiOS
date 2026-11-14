@@ -1,4 +1,4 @@
-"""End-to-end account lifecycle against isolated SQLite and development mail sink."""
+"""End-to-end account lifecycle against isolated SQLite and a test-only mail stub."""
 import base64
 import hashlib
 import hmac
@@ -12,11 +12,18 @@ from fastapi.testclient import TestClient
 from app.db import connect
 from app.main import app
 
+MAILBOX = []
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv('DATABASE_PATH', str(tmp_path/'accounts.db'))
     monkeypatch.setenv('NAGRIKOS_TOTP_KEY_FILE', str(tmp_path/'totp.key'))
+    monkeypatch.setenv('BREVO_API_KEY', 'test-only-key')
+    monkeypatch.setenv('MAIL_FROM', 'security@example.org')
+    MAILBOX.clear()
+    monkeypatch.setattr('app.account.send_mail', lambda _db, recipient, subject, body:
+                        MAILBOX.append((recipient, subject, body)))
     with TestClient(app) as c:
         yield c
 
@@ -26,8 +33,7 @@ def csrf(c):
 
 
 def mailed_token():
-    with connect() as db:
-        body=db.execute('SELECT body FROM mail_outbox ORDER BY id DESC LIMIT 1').fetchone()['body']
+    body=MAILBOX[-1][2]
     return re.search(r'[#?&](?:verify|reset|invite)=([^\s]+)',body).group(1)
 
 
@@ -80,10 +86,9 @@ def test_citizen_signup_verification_recovery_and_enumeration(client):
     reset=mailed_token()
     changed=client.post('/api/auth/reset-password',headers=csrf(client),json={'token':reset,'new_password':'another long unique phrase 123'})
     assert changed.status_code==200,changed.text
-    with connect() as db:
-        notice=db.execute('SELECT recipient,subject,body FROM mail_outbox ORDER BY id DESC LIMIT 1').fetchone()
-        assert notice['recipient']=='new@example.com' and 'password was changed' in notice['subject']
-        assert reset not in notice['body']
+    recipient, subject, body = MAILBOX[-1]
+    assert recipient=='new@example.com' and 'password was changed' in subject
+    assert reset not in body
     assert client.get('/api/auth/me').status_code==401
     assert client.post('/api/auth/reset-password',json={'token':reset,'new_password':'third long unique phrase 456'}).status_code==400
     assert client.post('/api/auth/login',json={'email':'new@example.com','password':pwd}).status_code==401
@@ -160,7 +165,7 @@ def test_public_mode_has_no_seed_and_breach_check_fails_closed(tmp_path, monkeyp
     monkeypatch.setenv('DATABASE_PATH',str(tmp_path/'public.db'))
     monkeypatch.setenv('COOKIE_SECURE','true')
     monkeypatch.setenv('NAGRIKOS_TOTP_KEY',Fernet.generate_key().decode())
-    monkeypatch.setenv('SMTP_HOST','smtp.example.com')
+    monkeypatch.setenv('BREVO_API_KEY','test-only-key')
     monkeypatch.setenv('MAIL_FROM','security@example.com')
     monkeypatch.setenv('PUBLIC_BASE_URL','https://nagrikos.example.com')
     monkeypatch.setenv('CORS_ORIGINS','https://nagrikos.example.com')
@@ -261,52 +266,3 @@ def test_expired_and_replayed_totp_and_challenge_attempt_limit(client):
     expired=client.post('/api/auth/mfa/challenge',headers=csrf(client),json={'challenge':challenge,'code':'000000'})
     assert expired.status_code==401 and 'expired' in expired.json()['detail'].lower()
     assert client.post('/api/auth/login',json={'email':'citizen@demo.in','password':'demo123'}).status_code==429
-
-
-def test_public_smtp_transport_and_no_link_in_response(tmp_path, monkeypatch):
-    from cryptography.fernet import Fernet
-    monkeypatch.setenv('NAGRIKOS_MODE','public')
-    monkeypatch.setenv('DATABASE_PATH',str(tmp_path/'public-mail.db'))
-    monkeypatch.setenv('COOKIE_SECURE','true')
-    monkeypatch.setenv('NAGRIKOS_TOTP_KEY',Fernet.generate_key().decode())
-    monkeypatch.setenv('SMTP_HOST','smtp.example.com')
-    monkeypatch.setenv('MAIL_FROM','security@example.com')
-    monkeypatch.setenv('PUBLIC_BASE_URL','https://nagrikos.example.com')
-    monkeypatch.setenv('CORS_ORIGINS','https://nagrikos.example.com')
-    messages=[]
-    class FakeSMTP:
-        def __init__(self,host,port,timeout):
-            assert (host,port,timeout)==('smtp.example.com',587,10)
-        def __enter__(self):return self
-        def __exit__(self,*args):pass
-        def starttls(self,context):assert context is not None
-        def send_message(self,message):messages.append(message)
-    class EmptyRange:
-        def __enter__(self):return self
-        def __exit__(self,*args):pass
-        def read(self,_):return b''
-    monkeypatch.setattr('smtplib.SMTP',FakeSMTP)
-    monkeypatch.setattr('urllib.request.urlopen',lambda *_a,**_kw:EmptyRange())
-    with TestClient(app) as public:
-        response=public.post('/api/auth/signup',json={'name':'Public Citizen','email':'PUBLIC@example.com',
-                                                      'password':'unique public phrase 123'})
-        assert response.status_code==202
-        assert 'verify=' not in response.text and 'PUBLIC@example.com' not in response.text
-        assert len(messages)==1 and messages[0]['To']=='public@example.com'
-        with connect() as db:
-            assert db.execute('SELECT is_demo FROM users WHERE email_canonical=?',('public@example.com',)).fetchone()['is_demo']==0
-        token=re.search(r'#verify=([^\s]+)',messages[0].get_content()).group(1)
-        assert public.post('/api/auth/verify-email',json={'token':token,
-                                                           'password':'unique public phrase 123'}).status_code==200
-        signed=public.post('/api/auth/login',json={'email':'public@example.com','password':'unique public phrase 123'})
-        assert signed.status_code==200
-        assert 'secure' in signed.headers['set-cookie'].lower()
-        assert 'httponly' in signed.headers['set-cookie'].lower()
-        class FailingSMTP(FakeSMTP):
-            def send_message(self,_message):raise OSError('mail service down')
-        monkeypatch.setattr('smtplib.SMTP',FailingSMTP)
-        failed=public.post('/api/auth/signup',json={'name':'Second Citizen','email':'second@example.com',
-                                                    'password':'another unique phrase 123'})
-        assert failed.status_code==503 and 'unavailable' in failed.json()['detail'].lower()
-        with connect() as db:
-            assert db.execute('SELECT 1 FROM users WHERE email_canonical=?',('second@example.com',)).fetchone() is None

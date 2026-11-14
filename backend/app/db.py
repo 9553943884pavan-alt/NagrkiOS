@@ -1,4 +1,4 @@
-"""SQLite schema and realistic but fully SYNTHETIC demonstration data."""
+"""SQLite local storage and PostgreSQL production storage."""
 from __future__ import annotations
 import json, os, random, sqlite3, stat
 from contextlib import contextmanager
@@ -7,6 +7,7 @@ from pathlib import Path
 from .data import DISTRICTS, CATEGORIES, SAMPLE_ISSUES
 from .ai import analyze
 from .auth import hash_password
+from . import postgres
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / 'data' / 'nagrikos.db'
 
@@ -17,6 +18,17 @@ def db_path() -> Path:
 
 @contextmanager
 def connect():
+    if postgres.enabled():
+        db = postgres.connect()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+        return
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     if os.name == 'posix':
@@ -175,6 +187,18 @@ def seed_database(db: sqlite3.Connection, count: int = 520) -> None:
 
 
 def initialize() -> None:
+    if postgres.enabled():
+        # Production schema changes run over DIRECT_URL through Alembic, not
+        # from each web worker over the pooled application connection.
+        from sqlalchemy.exc import DBAPIError
+        try:
+            with connect() as db:
+                version = db.execute('SELECT version_num FROM alembic_version').fetchone()
+        except DBAPIError as exc:
+            raise RuntimeError('PostgreSQL schema is missing; run Alembic upgrade head with DIRECT_URL') from exc
+        if version is None or version[0] != '20261114_01':
+            raise RuntimeError('PostgreSQL schema is not at the expected Alembic revision')
+        return
     with connect() as db:
         db.executescript(SCHEMA)
         # v2/v3 upgrades must preserve accounts and submitted cases.
@@ -200,6 +224,8 @@ def initialize() -> None:
 
 
 def reset_demo() -> None:
+    if postgres.enabled():
+        raise ValueError('Demo reset is unavailable for PostgreSQL')
     if os.getenv('NAGRIKOS_MODE') != 'demo':
         raise ValueError('Demo reset is available only in explicit demo mode')
     with connect() as db:

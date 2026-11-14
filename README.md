@@ -2,7 +2,9 @@
 
 **Current authentication workflow:** citizen signup and email verification, password recovery, two-step verification with recovery codes, and administrator-only staff invitations are documented in [`docs/AUTH_SECURITY_V5.md`](docs/AUTH_SECURITY_V5.md). See [`docs/AUTH_VALIDATION_V5.md`](docs/AUTH_VALIDATION_V5.md) for current test results. The v4 notes below are historical.
 
-A **v4 audited and security-upgraded, runnable full-stack demo** of a common intake, routing, and tracking pipeline for citizen grievances. It includes a detailed React dashboard, a FastAPI API, a persistent SQLite database, and deterministic **mock** AI recommendations. All 520 initial grievances are **synthetic**; this is **not** the UP government's Jansunwai or CM Helpline service.
+**Render Free + Vercel deployment:** Follow [docs/RENDER_VERCEL_DEPLOYMENT.md](docs/RENDER_VERCEL_DEPLOYMENT.md). It covers the Vercel `/api` rewrite, Neon migration, public-mode secrets, administrator bootstrap, and smoke checks. Live Neon migration and Brevo delivery are pending verification; uploaded files are not durable on Render Free. The local-demo guidance below is historical and does not describe a public deployment.
+
+A **v4 audited and security-upgraded, runnable full-stack demo** of a common intake, routing, and tracking pipeline for citizen grievances. It includes a detailed React dashboard, a FastAPI API, local SQLite storage with an optional Neon PostgreSQL path, and deterministic **mock** AI recommendations. All 520 initial grievances are **synthetic**; this is **not** the UP government's Jansunwai or CM Helpline service.
 
 **Two usable frontends:**
 
@@ -16,6 +18,8 @@ This is an audited iteration of the v3 design. It retains the same React colors,
 Read [`docs/AUDIT_V4.md`](docs/AUDIT_V4.md), [`docs/VALIDATION_V4.md`](docs/VALIDATION_V4.md) and [`docs/ML_SCOPE_V4.md`](docs/ML_SCOPE_V4.md) for the complete test results, limitations and feature scope. **27 backend integration/security tests passed.** The full React npm build and browser clicks must still be verified on your Windows machine because npm registry and browser binaries were unavailable in the creation environment.
 
 **Migrating v3 data:** stop both servers; back up your old `backend/data/nagrikos.db` and `backend/uploads/` before copying them into this folder. The database schema migrates automatically at startup without deleting existing cases. Legacy password hashes upgrade on successful login. Do not copy over any active test database, and back up your TOTP key separately if you enable MFA.
+
+**Neon PostgreSQL:** [docs/NEON_POSTGRESQL.md](docs/NEON_POSTGRESQL.md) explains the pooled application URL, direct Alembic URL, verified SQLite copy, development-branch testing, and rollback. Keep the original SQLite database and upload directory until migration is verified.
 
 ## 1. Quick start in VS Code on Windows
 

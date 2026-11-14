@@ -19,6 +19,7 @@ from .auth import (current_user, hash_password, verify_password, require_admin, 
                    SESSION_COOKIE, SESSION_SECONDS, SESSION_IDLE_SECONDS)
 from .data import CATEGORIES, DEPARTMENTS, DISTRICTS
 from .db import connect, initialize, iso, reset_demo
+from .postgres import enabled as postgres_enabled
 from .account import router as account_router, mode, validate_config, password_policy
 
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', str(Path(__file__).resolve().parent.parent / 'uploads')))
@@ -509,13 +510,13 @@ def create_complaint(body: CreateComplaintBody, user: dict = Depends(current_use
         cursor = db.execute('''INSERT INTO complaints (ticket_no,title,description,district,category,department,
             priority,urgency_score,confidence,estimated_hours,rationale,language,tags,status,channel,
             citizen_id,assigned_to,attachment_path,attachment_description,created_at,updated_at,due_at,resolved_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id''', (
             None,body.title.strip(),body.description.strip(),body.district,ai['category'],ai['department'],
             ai['priority'],ai['urgency_score'],ai['confidence'],ai['estimated_hours'],ai['rationale'],
             ai['language'],json.dumps(ai['tags']),'new',body.channel,citizen_id,None,
             body.attachment_path, mock_image_description(stored_hint) if body.attachment_path else None,
             iso(now),iso(now),iso(now + timedelta(hours=ai['estimated_hours'])),None))
-        case_id = cursor.lastrowid
+        case_id = cursor.fetchone()[0]
         ticket_no = f'UP-{now.year}-{case_id:06d}'
         db.execute('UPDATE complaints SET ticket_no=? WHERE id=?',(ticket_no,case_id))
         if body.attachment_path:
@@ -540,13 +541,14 @@ def complaints(status: str | None = None, priority: str | None = None,
     if department: clauses.append('c.department=?'); values.append(department)
     if assigned_to_me: clauses.append('c.assigned_to=?'); values.append(user['id'])
     if search:
-        clauses.append('(c.title LIKE ? OR c.description LIKE ? OR c.ticket_no LIKE ?)')
+        match = 'ILIKE' if postgres_enabled() else 'LIKE'
+        clauses.append(f'(c.title {match} ? OR c.description {match} ? OR c.ticket_no {match} ?)')
         values.extend([f'%{search[:100]}%']*3)
     where = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
     with connect() as db:
         total = db.execute('SELECT COUNT(*) AS n FROM complaints c'+where, values).fetchone()['n']
         rows = db.execute('SELECT c.*, u.name AS assigned_name FROM complaints c LEFT JOIN users u ON c.assigned_to=u.id'+where+
-                          ' ORDER BY CASE c.priority WHEN "critical" THEN 0 WHEN "high" THEN 1 WHEN "medium" THEN 2 ELSE 3 END, c.created_at DESC LIMIT ? OFFSET ?',
+                          " ORDER BY CASE c.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, c.created_at DESC LIMIT ? OFFSET ?",
                           [*values,page_size,(page-1)*page_size]).fetchall()
     return {'items':[complaint_obj(row) for row in rows], 'total':total,'page':page,
             'page_size':page_size,'pages':max(1,(total+page_size-1)//page_size)}
@@ -628,6 +630,9 @@ def officers(user: dict = Depends(require_official)):
 
 
 def sql_stats(db, where: str = '', params: tuple | list = ()):
+    duration = ("EXTRACT(EPOCH FROM (resolved_at::timestamptz-created_at::timestamptz))/3600"
+                if postgres_enabled() else '(julianday(resolved_at)-julianday(created_at))*24')
+    average = f'ROUND(CAST(AVG(CASE WHEN resolved_at IS NOT NULL THEN {duration} END) AS NUMERIC),1)'
     return dict(db.execute(f'''SELECT COUNT(*) AS total,
       SUM(CASE WHEN status='new' THEN 1 ELSE 0 END) AS new_count,
       SUM(CASE WHEN status='in_progress' THEN 1 ELSE 0 END) AS in_progress,
@@ -636,7 +641,7 @@ def sql_stats(db, where: str = '', params: tuple | list = ()):
       SUM(CASE WHEN priority IN ('critical','high') AND status!='resolved' THEN 1 ELSE 0 END) AS urgent_open,
       SUM(CASE WHEN status!='resolved' AND due_at < ? THEN 1 ELSE 0 END) AS overdue,
       SUM(CASE WHEN resolved_at IS NOT NULL AND resolved_at <= due_at THEN 1 ELSE 0 END) AS resolved_within_target,
-      ROUND(AVG(CASE WHEN resolved_at IS NOT NULL THEN (julianday(resolved_at)-julianday(created_at))*24 ELSE NULL END),1) AS avg_resolution_hours
+      {average} AS avg_resolution_hours
       FROM complaints {where}''', [iso(datetime.now(timezone.utc)), *params]).fetchone())
 
 
@@ -702,13 +707,16 @@ def officer_overview(user: dict=Depends(require_officer)):
 
 @app.get('/api/departments')
 def departments(user: dict=Depends(require_admin)):
+    duration = ("EXTRACT(EPOCH FROM (resolved_at::timestamptz-created_at::timestamptz))/3600"
+                if postgres_enabled() else '(julianday(resolved_at)-julianday(created_at))*24')
+    average = f'ROUND(CAST(AVG(CASE WHEN resolved_at IS NOT NULL THEN {duration} END) AS NUMERIC),1)'
     with connect() as db:
-        rows = db.execute('''SELECT department AS name,COUNT(*) AS total,
+        rows = db.execute(f'''SELECT department AS name,COUNT(*) AS total,
           SUM(CASE WHEN status!='resolved' THEN 1 ELSE 0 END) AS open,
           SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END) AS resolved,
           SUM(CASE WHEN status='escalated' THEN 1 ELSE 0 END) AS escalated,
           SUM(CASE WHEN status!='resolved' AND due_at < ? THEN 1 ELSE 0 END) AS overdue,
-          ROUND(AVG(CASE WHEN resolved_at IS NOT NULL THEN (julianday(resolved_at)-julianday(created_at))*24 END),1) AS avg_resolution_hours
+          {average} AS avg_resolution_hours
           FROM complaints GROUP BY department ORDER BY open DESC''', (iso(datetime.now(timezone.utc)),)).fetchall()
     return [{**dict(row),'short':next((d['short'] for d in DEPARTMENTS if d['name']==row['name']), 'GEN'),
              'resolution_rate':round(100*(row['resolved'] or 0)/max(row['total'],1),1)} for row in rows]
@@ -721,7 +729,7 @@ def insights(user: dict=Depends(require_admin)):
           COUNT(*) AS count,
           SUM(CASE WHEN status!='resolved' THEN 1 ELSE 0 END) AS open,
           SUM(CASE WHEN priority IN ('high','critical') THEN 1 ELSE 0 END) AS urgent
-          FROM complaints GROUP BY category,district HAVING COUNT(*)>=3 ORDER BY count DESC,urgent DESC LIMIT 12''')]
+          FROM complaints GROUP BY category,district,department HAVING COUNT(*)>=3 ORDER BY count DESC,urgent DESC LIMIT 12''')]
         trends=[dict(r) for r in db.execute('''SELECT category,substr(created_at,1,7) AS month,COUNT(*) AS count
           FROM complaints GROUP BY category,month ORDER BY month,category''')]
         district_risk=[dict(r) for r in db.execute('''SELECT district AS name,

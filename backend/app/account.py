@@ -3,15 +3,14 @@ from __future__ import annotations
 
 import binascii
 import hashlib
+import json
 import os
 import re
 import secrets
-import smtplib
 import ssl
 import time
 import urllib.error
 import urllib.request
-from email.message import EmailMessage
 from urllib.parse import quote
 from urllib.parse import urlsplit
 
@@ -33,12 +32,16 @@ def mode() -> str:
 
 
 def mail_ready() -> bool:
-    return mode() == 'demo' or bool(os.getenv('SMTP_HOST','').strip() and os.getenv('MAIL_FROM','').strip())
+    return bool(os.getenv('BREVO_API_KEY', '').strip() and os.getenv('MAIL_FROM', '').strip())
 
 
 def validate_config() -> None:
     if mode() not in {'demo', 'public'}:
         raise RuntimeError('Set NAGRIKOS_MODE=demo or public explicitly')
+    if os.getenv('DATABASE_URL', '').strip() and mode() != 'public':
+        raise RuntimeError('PostgreSQL requires public mode; demo accounts and reset are disabled')
+    if os.getenv('NAGRIKOS_REQUIRE_POSTGRES', '').lower() == 'true' and not os.getenv('DATABASE_URL', '').strip():
+        raise RuntimeError('This deployment requires DATABASE_URL')
     if mode() == 'public':
         if os.getenv('COOKIE_SECURE', '').lower() != 'true':
             raise RuntimeError('Public mode requires COOKIE_SECURE=true and HTTPS')
@@ -50,7 +53,7 @@ def validate_config() -> None:
         except (ValueError, TypeError, binascii.Error):
             raise RuntimeError('NAGRIKOS_TOTP_KEY must be a valid Fernet key')
         if not mail_ready():
-            raise RuntimeError('Public mode requires SMTP_HOST and MAIL_FROM')
+            raise RuntimeError('Public mode requires BREVO_API_KEY and MAIL_FROM')
         try:
             canonical(os.environ['MAIL_FROM'])
         except HTTPException:
@@ -58,19 +61,15 @@ def validate_config() -> None:
         base=urlsplit(os.getenv('PUBLIC_BASE_URL',''))
         if base.scheme != 'https' or not base.hostname or base.hostname in {'localhost','127.0.0.1'} or base.username or base.password or base.query or base.fragment:
             raise RuntimeError('Public mode requires HTTPS PUBLIC_BASE_URL')
-        if os.getenv('SMTP_USER') and not os.getenv('SMTP_PASSWORD'):
-            raise RuntimeError('SMTP_PASSWORD is required when SMTP_USER is set')
-        try:
-            port=int(os.getenv('SMTP_PORT','587'))
-        except ValueError:
-            raise RuntimeError('SMTP_PORT must be a valid port')
-        if port<1 or port>65535:
-            raise RuntimeError('SMTP_PORT must be a valid port')
         origins = [x.strip() for x in os.getenv('CORS_ORIGINS', '').split(',') if x.strip()]
         if any(urlsplit(x).scheme != 'https' or not urlsplit(x).hostname or '*' in x or
                urlsplit(x).hostname in {'localhost','127.0.0.1'} or urlsplit(x).path or
                urlsplit(x).query or urlsplit(x).fragment or urlsplit(x).username for x in origins):
             raise RuntimeError('Public CORS origins must use HTTPS')
+    if os.getenv('BREVO_API_KEY', ''):
+        key = os.environ['BREVO_API_KEY']
+        if key != key.strip() or any(not 33 <= ord(c) <= 126 for c in key):
+            raise RuntimeError('BREVO_API_KEY must contain only printable non-space ASCII')
 
 
 def canonical(email: str) -> str:
@@ -121,24 +120,28 @@ def throttle(db, request: Request, purpose: str, email: str, limit: int = 5, win
 
 
 def send_mail(db, recipient: str, subject: str, body: str) -> None:
-    if mode() == 'demo':
-        db.execute('INSERT INTO mail_outbox(recipient,subject,body,created_at) VALUES (?,?,?,?)',
-                   (recipient, subject, body, int(time.time())))
-        return
-    message = EmailMessage()
-    message['From'] = os.environ['MAIL_FROM']
-    message['To'] = recipient
-    message['Subject'] = subject
-    message.set_content(body)
-    host = os.environ['SMTP_HOST']
-    port = int(os.getenv('SMTP_PORT', '587'))
+    if not mail_ready():
+        raise HTTPException(503, 'Email delivery is unavailable. Try again later.')
+    payload = json.dumps({'sender': {'email': os.environ['MAIL_FROM']},
+                          'to': [{'email': recipient}], 'subject': subject,
+                          'textContent': body}).encode('utf-8')
+    request = urllib.request.Request('https://api.brevo.com/v3/smtp/email', data=payload,
+                                     headers={'api-key': os.environ['BREVO_API_KEY'],
+                                              'accept': 'application/json',
+                                              'Content-Type': 'application/json'}, method='POST')
     try:
-        with smtplib.SMTP(host, port, timeout=10) as smtp:
-            smtp.starttls(context=ssl.create_default_context())
-            if os.getenv('SMTP_USER'):
-                smtp.login(os.environ['SMTP_USER'], os.environ['SMTP_PASSWORD'])
-            smtp.send_message(message)
-    except (OSError, smtplib.SMTPException) as exc:
+        with urllib.request.urlopen(request, timeout=10, context=ssl.create_default_context()) as result:
+            if result.status != 201:
+                raise ValueError('Email API rejected the request')
+            raw = result.read(16_385)
+            if len(raw) > 16_384:
+                raise ValueError('Email API response too large')
+            accepted = json.loads(raw)
+            message_id = accepted.get('messageId') if isinstance(accepted, dict) else None
+            if (not isinstance(message_id, str) or len(message_id) > 512 or
+                    not re.fullmatch(r'<[^<>\s@]+@[^<>\s@]+>', message_id)):
+                raise ValueError('Email API did not confirm acceptance')
+    except (OSError, ValueError, urllib.error.URLError) as exc:
         raise HTTPException(503, 'Email delivery is unavailable. Try again later.') from exc
 
 
@@ -299,14 +302,6 @@ def reset_password(body: ResetBody, request: Request, response: Response):
     return {'message':'Password changed. Sign in again on all devices.'}
 
 
-@router.get('/dev-mailbox')
-def dev_mailbox(request: Request):
-    if mode() != 'demo' or not request.client or request.client.host not in {'127.0.0.1','::1','testclient'}:
-        raise HTTPException(404, 'Not found')
-    with connect() as db:
-        return {'messages':[dict(r) for r in db.execute('SELECT * FROM mail_outbox ORDER BY id DESC LIMIT 20')]}
-
-
 class StaffInvite(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     email: str = Field(min_length=3, max_length=254)
@@ -318,6 +313,8 @@ class StaffInvite(BaseModel):
 
 @router.post('/staff-invitations', status_code=202)
 def invite_staff(body: StaffInvite, request: Request, admin: dict = Depends(require_admin)):
+    if not mail_ready():
+        raise HTTPException(503, 'Invitations are unavailable because email delivery is not configured')
     from .data import DEPARTMENTS, DISTRICTS
     if body.role not in {'officer','admin'}:
         raise HTTPException(422, 'Invalid staff role')
