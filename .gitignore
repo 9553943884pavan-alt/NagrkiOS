@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+# Local demo state (never commit real submissions)
+backend/data/*.db
+backend/data/*.sqlite*
+backend/uploads/*
+!backend/uploads/.gitkeep
+# Frontend
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+.playwright-cli/
+# IDE/system
+.DS_Store
+Thumbs.db
+.vscode/*.local.json

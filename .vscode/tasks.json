@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "NagrikOS: backend (Windows)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/start_backend_windows.bat",
+      "windows": {"command": "cmd /c \"${workspaceFolder}\\scripts\\start_backend_windows.bat\""},
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "NagrikOS: frontend (Windows)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/start_frontend_windows.bat",
+      "windows": {"command": "cmd /c \"${workspaceFolder}\\scripts\\start_frontend_windows.bat\""},
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

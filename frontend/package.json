@@ -1,0 +1,33 @@
+{
+  "name": "nagrikos-prototype",
+  "private": true,
+  "version": "4.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "audit": "npm audit --audit-level=moderate"
+  },
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0",
+    "recharts": "3.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "rollup": "npm:@rollup/wasm-node@4.68.3",
+    "typescript": "~5.7.3",
+    "vite": "6.4.6"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}
