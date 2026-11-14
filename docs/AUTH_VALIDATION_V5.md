@@ -20,8 +20,10 @@ New routes: `GET /api/auth/config`, `POST /api/auth/signup`, `/verify-email`, `/
 | `npm.cmd run build -- --configLoader runner` | Passed, 2,296 modules; app 390.63 kB, charts 457.73 kB, no 500 kB warning |
 | `npm.cmd ls vite rollup recharts esbuild` | Vite 6.4.6, Rollup WASM alias 4.68.3, Recharts 3.10.1, esbuild 0.25.12 |
 | `npm.cmd run dev -- --port 15173 --configLoader runner` with isolated FastAPI on port 18000 | Vite ready; React loaded and called FastAPI through the proxy |
-| `npm.cmd audit --audit-level=moderate` | **Could not complete**: sandbox could not reach npm advisory endpoint; no current advisory result claimed |
-| Plain `npm.cmd run build` inside the restricted sandbox | **Could not complete**: esbuild was denied access to `vite.config.ts`; the runner loader build above passed. An earlier elevated plain build passed before the final account UI edits. |
+| `npm audit` (user's local PowerShell run after commit `e71ecf5`) | **User reported:** 0 vulnerabilities |
+| Plain `npm run build` (user's local PowerShell run after commit `e71ecf5`) | **User reported:** passed, 2,296 modules; app 390.63 kB, charts 457.73 kB, no 500 kB warning |
+
+The assistant also attempted `npm.cmd audit --audit-level=moderate` and plain `npm.cmd run build` inside the restricted sandbox. The advisory endpoint was unreachable there, and esbuild was denied access to `vite.config.ts`; the user-supplied local output above verifies both commands in the intended Windows environment. The user's `npm install` output also reported 115 audited packages and zero vulnerabilities.
 
 The backend tests cover signup and forbidden role payloads, email normalization and uniqueness, unverified login, verification replay, generic recovery responses, reset expiry/replay and session revocation, SMTP delivery and failure with a test transport, public mode fail-closed startup and no seed, breached-password checks with a fake range response, login and sensitive-action throttling, QR/manual-key enrollment, expired/replayed TOTP, challenge expiry and cross-challenge limits, recovery-code single use, factor removal, staff invitation authorization, and the existing citizen/officer/admin case isolation and CSRF tests. Production SMTP and the live breach-check service were not contacted.
 
@@ -33,4 +35,4 @@ Before testing, a SQLite backup was made at `backend/data/nagrikos_pre_auth_v5_2
 
 ## Remaining limits
 
-The default Vite config bundler and npm advisory endpoint need a normal unrestricted local run for final release validation. The SMTP test used a local fake transport; live SMTP, HTTPS reverse-proxy behavior, external email delivery and public hosting were not verified. TOTP is not phishing resistant, and loss of both the authenticator and all recovery codes requires an external operator process not implemented in this prototype. The security controls here do not certify production deployment.
+The SMTP test used a local fake transport; live SMTP, HTTPS reverse-proxy behavior, external email delivery and public hosting were not verified. TOTP is not phishing resistant, and loss of both the authenticator and all recovery codes requires an external operator process not implemented in this prototype. The security controls here do not certify production deployment.
