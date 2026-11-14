@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set NAGRIKOS_MODE=demo
 cd /d "%~dp0..\backend"
 if not exist ".venv\Scripts\python.exe" (
   echo [NagrikOS] Creating a Python environment...

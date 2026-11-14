@@ -111,3 +111,10 @@ html[data-input-mode="pointer"] .custom-select-control:focus-visible {
 .security-actions{display:flex;flex-wrap:wrap;gap:10px}.security-mfa{border-top:1px solid #e7efeb;padding-top:18px}
 .security-mfa p{font-size:12px;color:#71867e;line-height:1.6}.security-secret{display:flex;flex-direction:column;gap:8px;background:#edf9f4;padding:12px;border-radius:8px;color:#235c50;font-size:12px}
 .security-secret code{font-size:14px;font-weight:700;letter-spacing:.08em;overflow-wrap:anywhere}
+.auth-links{display:flex;justify-content:space-between;gap:12px;margin-top:18px;flex-wrap:wrap}
+.auth-links button,.auth-text-button{border:0;background:none;color:#208b75;font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:3px 0;text-align:left}
+.auth-links button:focus-visible,.auth-text-button:focus-visible{outline:2px solid #208b75;outline-offset:3px}
+.mfa-qr{width:200px;height:200px;max-width:100%;background:#fff;border:1px solid #dce8e2;padding:8px;border-radius:8px}
+.security-secret ul{margin:4px 0;padding-left:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:5px}
+.security-form select{height:42px;border:1px solid #dce8e2;border-radius:9px;background:#fff;color:#1c3932;padding:0 10px}
+.auth-password-field{display:grid;gap:7px}.auth-password-field label{font-size:11px;font-weight:700}.auth-password-field input{width:100%}

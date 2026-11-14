@@ -14,12 +14,12 @@ export async function api<T>(path:string, options:RequestInit = {}): Promise<T> 
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type','application/json');
   let response:Response;
   try { response = await fetch(`${BASE}${path}`, {...options,credentials:'same-origin',headers}); }
-  catch {throw new ApiError(0,'Cannot connect to the backend. Start FastAPI on port 8000.');}
+  catch {throw new ApiError(0,'Cannot connect to the service. Check your connection and try again.');}
   if (!response.ok) {
-    const payload = await response.json().catch(()=>({detail:response.statusText}));
-    const detail = payload.detail;
-    const message = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((x:{msg?:string})=>x.msg).join('; ') : 'Request failed';
-    if (response.status === 401 && !['/api/auth/login','/api/auth/me'].includes(path)) window.dispatchEvent(new Event('nagrikos-session-expired'));
+    const payload = await response.json().catch(()=>null);
+    const detail = payload?.detail;
+    const message = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((x:{msg?:string})=>x.msg).join('; ') : response.status >= 500 ? 'Service temporarily unavailable. Try again.' : 'Request failed. Try again.';
+    if (response.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('nagrikos-session-expired'));
     throw new ApiError(response.status,message);
   }
   if (response.status === 204) return undefined as T;

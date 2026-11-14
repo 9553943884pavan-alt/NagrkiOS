@@ -97,8 +97,8 @@ def test_photo_owner_access_and_one_use_reference(client):
     admin=login(client)
     citizen=login(client,'citizen@demo.in')
     with connect() as db:
-        db.execute('INSERT INTO users (id,name,email,password_hash,role,department,district,created_at) VALUES (?,?,?,?,?,?,?,?)',
-                   (6,'Other Citizen','other@demo.in',hash_password('demo123'),'citizen',None,'Lucknow',iso(datetime.now(timezone.utc))))
+        db.execute('INSERT INTO users (id,name,email,email_canonical,email_verified_at,password_hash,role,department,district,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                   (6,'Other Citizen','other@demo.in','other@demo.in',int(time.time()),hash_password('demo123'),'citizen',None,'Lucknow',iso(datetime.now(timezone.utc))))
     other=login(client,'other@demo.in')
     upload=client.post('/api/attachments',headers=citizen,files={'file':('street.png',PNG,'image/png')})
     assert upload.status_code==200,upload.text
@@ -131,7 +131,7 @@ def test_request_origin_and_validation(client):
     assert client.post('/api/admin/reset-demo',headers={**admin,'Origin':'https://untrusted.example'},json={}).status_code==403
     assert client.post('/api/auth/login',headers={'Origin':'https://untrusted.example'},
                        json={'email':'admin@demo.in','password':'demo123'}).status_code==403
-    assert client.post('/api/auth/login',json={'email':'admin@demo.in','password':'x'*1000}).status_code==422
+    assert client.post('/api/auth/login',json={'email':'admin@demo.in','password':'x'*2000}).status_code==422
     assert client.get('/api/export/complaints.csv',headers=admin).headers['cache-control']=='no-store'
     assert client.get('/api/meta').headers['x-content-type-options']=='nosniff'
 

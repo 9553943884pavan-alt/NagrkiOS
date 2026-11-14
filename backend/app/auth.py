@@ -24,7 +24,8 @@ CSRF_COOKIE = 'nagrikos_csrf'
 SESSION_SECONDS = 12 * 60 * 60
 SESSION_IDLE_SECONDS = 30 * 60
 PASSWORD_HASHER = PasswordHasher(time_cost=2, memory_cost=19 * 1024, parallelism=1, hash_len=32, salt_len=16)
-COOKIE_SECURE = os.getenv('COOKIE_SECURE', 'false').lower() == 'true'
+def cookie_secure() -> bool:
+    return os.getenv('COOKIE_SECURE', 'false').lower() == 'true'
 
 
 def hash_password(password: str, salt: str | None = None) -> str:
@@ -111,14 +112,14 @@ def token_hash(token: str) -> str:
 
 
 def apply_cookies(response: Response, session: str, csrf: str) -> None:
-    settings = dict(path='/', samesite='strict', secure=COOKIE_SECURE, max_age=SESSION_SECONDS)
+    settings = dict(path='/', samesite='strict', secure=cookie_secure(), max_age=SESSION_SECONDS)
     response.set_cookie(SESSION_COOKIE, session, httponly=True, **settings)
     response.set_cookie(CSRF_COOKIE, csrf, httponly=False, **settings)
 
 
 def remove_cookies(response: Response) -> None:
-    response.delete_cookie(SESSION_COOKIE, path='/', samesite='strict', secure=COOKIE_SECURE)
-    response.delete_cookie(CSRF_COOKIE, path='/', samesite='strict', secure=COOKIE_SECURE)
+    response.delete_cookie(SESSION_COOKIE, path='/', samesite='strict', secure=cookie_secure())
+    response.delete_cookie(CSRF_COOKIE, path='/', samesite='strict', secure=cookie_secure())
 
 
 def current_user(request: Request) -> dict:
@@ -127,10 +128,10 @@ def current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail='Please sign in')
     from .db import connect
     with connect() as db:
-        row = db.execute('''SELECT u.id,u.name,u.email,u.role,u.department,u.district,
+        row = db.execute('''SELECT u.id,u.name,u.email,u.role,u.department,u.district,u.is_demo,u.email_verified_at,
                         s.expires_at,s.last_seen_at FROM sessions s JOIN users u ON u.id=s.user_id
                         WHERE s.token_hash=?''', (token_hash(token),)).fetchone()
-    if not row or row['expires_at'] <= int(time.time()) or row['last_seen_at'] <= int(time.time()) - SESSION_IDLE_SECONDS:
+    if not row or row['expires_at'] <= int(time.time()) or row['last_seen_at'] <= int(time.time()) - SESSION_IDLE_SECONDS or row['email_verified_at'] is None or (os.getenv('NAGRIKOS_MODE')!='demo' and row['is_demo']):
         raise HTTPException(status_code=401, detail='Session expired; please sign in again')
     if int(time.time()) - row['last_seen_at'] >= 60:
         with connect() as db:

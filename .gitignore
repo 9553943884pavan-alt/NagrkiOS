@@ -8,6 +8,7 @@ venv/
 # Local demo state (never commit real submissions)
 backend/data/*.db
 backend/data/*.sqlite*
+backend/data/*.key
 backend/uploads/*
 !backend/uploads/.gitkeep
 # Frontend

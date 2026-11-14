@@ -1,5 +1,7 @@
 # NagrikOS v4 — Validation and Windows acceptance checklist
 
+This is historical v4 evidence. For the current authentication workflow and required `NAGRIKOS_MODE` setting, see [AUTH_SECURITY_V5.md](AUTH_SECURITY_V5.md) and [AUTH_VALIDATION_V5.md](AUTH_VALIDATION_V5.md).
+
 ## Verified in build environment
 
 - `python -m pytest -q`: **27 passed** (API workflow, privacy, CSRF, role restrictions, image upload, notes, CSV export, Argon2id migration, password change, TOTP setup/enroll/replay/disable, expiry, reset, mock triage contract).

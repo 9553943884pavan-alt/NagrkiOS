@@ -83,6 +83,29 @@ CREATE INDEX IF NOT EXISTS idx_complaints_created ON complaints(created_at);
 CREATE INDEX IF NOT EXISTS idx_complaints_department ON complaints(department);
 CREATE INDEX IF NOT EXISTS idx_complaints_district ON complaints(district);
 CREATE INDEX IF NOT EXISTS idx_complaints_citizen ON complaints(citizen_id);
+CREATE TABLE IF NOT EXISTS account_tokens (
+ token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ purpose TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+ used_at INTEGER, created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_account_tokens_user ON account_tokens(user_id,purpose);
+CREATE TABLE IF NOT EXISTS auth_challenges (
+ token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS recovery_codes (
+ code_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mail_outbox (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, recipient TEXT NOT NULL, subject TEXT NOT NULL,
+ body TEXT NOT NULL, created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS staff_invitations (
+ token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL,
+ role TEXT NOT NULL, department TEXT, district TEXT, expires_at INTEGER NOT NULL,
+ used_at INTEGER, invited_by INTEGER NOT NULL REFERENCES users(id)
+);
 '''
 
 USERS = [
@@ -102,8 +125,8 @@ def seed_database(db: sqlite3.Connection, count: int = 520) -> None:
     rng = random.Random(1076)
     now = datetime.now(timezone.utc)
     for user_id, name, email, role, dept, district in USERS:
-        db.execute('INSERT INTO users (id,name,email,password_hash,role,department,district,created_at) VALUES (?,?,?,?,?,?,?,?)', (
-            user_id, name, email, hash_password('demo123'), role, dept, district, iso(now)))
+        db.execute('INSERT INTO users (id,name,email,password_hash,role,department,district,created_at,email_canonical,email_verified_at,is_demo) VALUES (?,?,?,?,?,?,?,?,?,?,?)', (
+            user_id, name, email, hash_password('demo123'), role, dept, district, iso(now), email, int(now.timestamp()), 1))
     major = ['Lucknow','Prayagraj','Varanasi','Kanpur Nagar','Gorakhpur','Agra','Ghaziabad','Meerut','Ayodhya','Jhansi']
     for i in range(count):
         description, expected = rng.choice(SAMPLE_ISSUES)
@@ -156,17 +179,29 @@ def initialize() -> None:
         db.executescript(SCHEMA)
         # v2/v3 upgrades must preserve accounts and submitted cases.
         user_cols = {r['name'] for r in db.execute('PRAGMA table_info(users)')}
+        legacy_email_state = 'email_verified_at' not in user_cols
         session_cols = {r['name'] for r in db.execute('PRAGMA table_info(sessions)')}
-        for name, definition in [('mfa_secret','TEXT'),('mfa_pending','TEXT'),('mfa_last_counter','INTEGER NOT NULL DEFAULT -1')]:
+        for name, definition in [('mfa_secret','TEXT'),('mfa_pending','TEXT'),('mfa_last_counter','INTEGER NOT NULL DEFAULT -1'),
+                                 ('email_canonical','TEXT'),('email_verified_at','INTEGER'),('is_demo','INTEGER NOT NULL DEFAULT 0'),
+                                 ('mfa_pending_expires_at','INTEGER'),('mfa_pending_attempts','INTEGER NOT NULL DEFAULT 0')]:
             if name not in user_cols: db.execute(f'ALTER TABLE users ADD COLUMN {name} {definition}')
+        db.execute('UPDATE users SET email_canonical=lower(trim(email)) WHERE email_canonical IS NULL')
+        db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_canonical ON users(email_canonical)')
+        if legacy_email_state:
+            db.execute("UPDATE users SET email_verified_at=CAST(strftime('%s',created_at) AS INTEGER) WHERE email_verified_at IS NULL")
+        # Classify legacy seed identities once; newly provisioned accounts remain independent.
+        if legacy_email_state:
+            db.executemany('UPDATE users SET is_demo=1 WHERE id=? AND email_canonical=?', [(r[0],r[2]) for r in USERS])
         if 'last_seen_at' not in session_cols:
             db.execute('ALTER TABLE sessions ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0')
             db.execute('UPDATE sessions SET last_seen_at=created_at WHERE last_seen_at=0')
-        if db.execute('SELECT COUNT(*) FROM users').fetchone()[0] == 0:
+        if db.execute('SELECT COUNT(*) FROM users').fetchone()[0] == 0 and os.getenv('NAGRIKOS_MODE') == 'demo':
             seed_database(db)
 
 
 def reset_demo() -> None:
+    if os.getenv('NAGRIKOS_MODE') != 'demo':
+        raise ValueError('Demo reset is available only in explicit demo mode')
     with connect() as db:
         db.execute('DELETE FROM notes')
         db.execute('DELETE FROM history')

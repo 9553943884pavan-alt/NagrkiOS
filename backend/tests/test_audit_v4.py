@@ -25,8 +25,12 @@ def client(tmp_path, monkeypatch):
 
 
 def login(c,email='admin@demo.in',password='demo123',mfa_code=''):
-    r=c.post('/api/auth/login',json={'email':email,'password':password,'mfa_code':mfa_code})
+    r=c.post('/api/auth/login',json={'email':email,'password':password})
     assert r.status_code==200,r.text
+    if mfa_code:
+        assert r.json()['mfa_required'] is True
+        r=c.post('/api/auth/mfa/challenge',headers={'X-CSRF-Token':c.cookies.get('nagrikos_csrf','')},json={'challenge':r.json()['challenge'],'code':mfa_code})
+        assert r.status_code==200,r.text
     csrf=r.cookies['nagrikos_csrf']
     return {'Cookie':f'nagrikos_session={r.cookies["nagrikos_session"]}; nagrikos_csrf={csrf}', 'X-CSRF-Token':csrf}
 
@@ -83,13 +87,17 @@ def test_mfa_enrollment_replay_and_disable(client,monkeypatch):
     assert row['mfa_secret'] is None and secret not in row['mfa_pending']
     assert client.post('/api/auth/mfa/enable',headers=admin,json={'code':'000000'}).status_code==422
     now=int(time.time()); code=totp(secret,now)
-    assert client.post('/api/auth/mfa/enable',headers=admin,json={'code':code}).status_code==200
-    assert client.post('/api/auth/login',json={'email':'admin@demo.in','password':'demo123'}).status_code==401
-    assert client.post('/api/auth/login',json={'email':'admin@demo.in','password':'demo123','mfa_code':code}).status_code==401
+    enabled=client.post('/api/auth/mfa/enable',headers=admin,json={'code':code})
+    assert enabled.status_code==200
+    assert len(enabled.json()['recovery_codes'])==10
+    first=client.post('/api/auth/login',json={'email':'admin@demo.in','password':'demo123'})
+    assert first.json()['mfa_required'] is True and 'nagrikos_session' not in first.cookies
+    assert client.post('/api/auth/mfa/challenge',headers={'X-CSRF-Token':client.cookies.get('nagrikos_csrf','')},json={'challenge':first.json()['challenge'],'code':code}).status_code==401
     monkeypatch.setattr('app.main.time.time',lambda: now+35)
     code2=totp(secret,now+35)
     second=login(client,mfa_code=code2)
-    assert client.post('/api/auth/login',json={'email':'admin@demo.in','password':'demo123','mfa_code':code2}).status_code==401
+    replay=client.post('/api/auth/login',json={'email':'admin@demo.in','password':'demo123'}).json()
+    assert client.post('/api/auth/mfa/challenge',headers={'X-CSRF-Token':client.cookies.get('nagrikos_csrf','')},json={'challenge':replay['challenge'],'code':code2}).status_code==401
     monkeypatch.setattr('app.main.time.time',lambda: now+66)
     code3=totp(secret,now+66)
     assert client.post('/api/auth/mfa/disable',headers=second,json={'current_password':'bad','code':code3}).status_code==403
@@ -134,7 +142,7 @@ def test_read_authentication_and_no_private_data_leak(client):
     assert client.get('/api/auth/security').status_code==401
     assert client.get('/api/export/complaints.csv').status_code==401
     assert client.get('/api/attachments/0123456789abcdef01234567.jpg').status_code==401
-    assert client.get('/api/health').json()['ai']=='mock-rules-v1'
+    assert client.get('/api/health').json()=={'status':'ok'}
     res=client.get('/')
     assert 'content-security-policy' in res.headers
 

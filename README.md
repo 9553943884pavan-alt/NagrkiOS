@@ -1,5 +1,7 @@
 # NagrikOS — Civic Grievance Intelligence (Hackathon Prototype)
 
+**Current authentication workflow:** citizen signup and email verification, password recovery, two-step verification with recovery codes, and administrator-only staff invitations are documented in [`docs/AUTH_SECURITY_V5.md`](docs/AUTH_SECURITY_V5.md). See [`docs/AUTH_VALIDATION_V5.md`](docs/AUTH_VALIDATION_V5.md) for current test results. The v4 notes below are historical.
+
 A **v4 audited and security-upgraded, runnable full-stack demo** of a common intake, routing, and tracking pipeline for citizen grievances. It includes a detailed React dashboard, a FastAPI API, a persistent SQLite database, and deterministic **mock** AI recommendations. All 520 initial grievances are **synthetic**; this is **not** the UP government's Jansunwai or CM Helpline service.
 
 **Two usable frontends:**
@@ -25,6 +27,7 @@ Install **Python 3.11+** and, for the enhanced frontend, **Node.js 20+**. Open t
 cd backend
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:NAGRIKOS_MODE='demo'
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -51,6 +54,7 @@ If npm reports an unreviewed install script, run `npm approve-scripts --allow-sc
 cd backend
 python3 -m venv .venv
 ./.venv/bin/python -m pip install -r requirements.txt
+export NAGRIKOS_MODE=demo
 ./.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 

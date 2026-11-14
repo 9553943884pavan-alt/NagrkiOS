@@ -1,0 +1,36 @@
+# Authentication and account management
+
+## Design and configuration
+
+The app requires an explicit `NAGRIKOS_MODE`. `demo` is for a local development machine and enables synthetic accounts, the local mail sink at `/api/auth/dev-mailbox`, and the destructive sandbox reset. `public` rejects missing HTTPS cookie settings, persistent TOTP encryption key, HTTPS public URL, or SMTP delivery. It never seeds accounts. Existing seed identities and accounts created in demo mode are marked as demo accounts and cannot authenticate in public mode, including with old cookies. Demo API access is limited to loopback clients. Run `scripts/provision_admin.py` locally for the first public administrator; subsequent staff require an administrator invitation and their own password. Citizen signup rejects role or department fields from the request body.
+
+Public email delivery uses SMTP with STARTTLS and certificate verification. Set `SMTP_HOST`, `MAIL_FROM`, and optional SMTP credentials. No public verification or reset response includes a link. In demo mode, messages are written to a local SQLite mailbox for testing. The mailbox endpoint is not available in public mode. `PUBLIC_BASE_URL` must point to the frontend origin that handles verification, reset and invitation links. The React app and no-install frontend both support these links.
+
+New passwords are 15 to 1024 characters with no composition rule. Paste, autofill and password managers are supported. Common values are blocked locally. In public mode, the full password stays local while a five-character SHA-1 prefix is sent to the [Pwned Passwords range API](https://haveibeenpwned.com/API/v3#PwnedPasswords); the response is padded. If that safety check is unavailable, new password creation fails closed. Existing short demo passwords can only sign in in local demo mode. Passwords remain Argon2id hashes; legacy hashes are upgraded on successful sign-in.
+
+Email verification, reset and invitations use 256-bit random URL tokens, 30-minute verification/reset expiry (24 hours for staff invitations), SHA-256 hashes at rest, and single use. Links put tokens in the URL fragment so normal HTTP request logs do not receive them. Verification and reset requests have per-address and per-IP rate limits and generic responses. Reset clears all sessions, login challenges and outstanding account tokens, then sends an account notification. Email verification is required before sign-in.
+
+Password verification precedes the MFA challenge. Successful password verification for a TOTP account creates a five-minute, five-attempt challenge and no authenticated session. Failed attempts are also limited across new challenges for the same account. The challenge accepts a six-digit TOTP or a one-time recovery code. TOTP accepts one adjacent 30-second step for clock skew and rejects replayed counters. MFA enrollment requires the current password; replacing or removing an existing factor also requires its current code or a recovery code. Pending enrollment expires after ten minutes and five failed confirmations. The QR and manual key appear only in the setup UI. Ten 80-bit recovery codes are shown once and stored only as hashes. Enrollment rotates the current session and revokes all earlier sessions. Disabling MFA and changing or resetting passwords revoke all sessions. There is no administrator MFA reset.
+
+Sessions remain opaque, server revocable, HttpOnly and SameSite=Strict. The CSRF cookie and header are checked for authenticated state changes. The absolute lifetime is 12 hours and the inactivity limit is 30 minutes. In public mode the cookie is Secure and HTTPS must be terminated before the app. The origin allowlist is explicit; do not place untrusted reverse proxies in front of demo mode. No auth token is stored in localStorage. Account routes return only needed user fields.
+
+## Migration and operations
+
+Run `python scripts/migrate_auth_v5.py --database data/nagrikos.db` from `backend` before first upgraded startup. The script creates a timestamped SQLite backup, applies additive schema changes and compares user, session, case, note, history and attachment counts plus `PRAGMA integrity_check`. It does not delete existing rows. The app also applies idempotent schema upgrades on startup. Preserve the database and TOTP encryption key together in backups. Do not run the demo reset to migrate data.
+
+For local development, set `NAGRIKOS_MODE=demo` and start FastAPI. Read test emails at `/api/auth/dev-mailbox` from loopback. For public deployment, configure a trusted TLS reverse proxy and SMTP service, set the public environment variables, provision the first administrator locally, and perform a deployment security review. Public SMTP delivery, reverse-proxy headers, HTTPS, and live Pwned Passwords availability were not exercised by the isolated test suite.
+
+Serve the React app and `/api` from the same HTTPS origin in public mode so HttpOnly cookies and the CSRF header work as designed. Auth records and token hashes live in relational tables; no auth state is placed in attachment storage. A later PostgreSQL migration can preserve the API and account lifecycle, but will require a separate database adapter and migration. This task does not implement that migration.
+
+## Standards used
+
+- [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html): password length and blocklist, authenticator lifecycle, saved recovery codes, and replay resistance.
+- [OWASP ASVS 5.0 authentication requirements](https://github.com/OWASP/ASVS/blob/master/5.0/en/0x15-V6-Authentication.md): factor lifecycle and single-use OTP expectations.
+- [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html): generic login errors, reauthentication, and throttling.
+- [OWASP MFA Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html): factor enrollment, recovery and replacement.
+- [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html): generic responses, expiring single-use URL tokens and no-referrer policy.
+- [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html): session rotation, cookie properties, idle and absolute expiry.
+
+## Remaining limitations
+
+TOTP and password are phishable; passkeys are a separately scoped enhancement. This prototype has no identity-proofing process if a user loses both authenticator and every recovery code. A small local common-password list supplements the public breach check; it is not a comprehensive offline blocklist. The local demo mode intentionally exposes synthetic credentials and should never be exposed to the internet. The UI and isolated tests do not certify a production deployment.

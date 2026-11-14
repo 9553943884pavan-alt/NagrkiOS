@@ -1,7 +1,8 @@
-import {useState,type ReactNode} from 'react';
+import {useEffect,useState,type ReactNode} from 'react';
 import {NavLink,useLocation,useNavigate} from 'react-router-dom';
 import {Activity,BarChart3,Bell,Building2,ChevronDown,ClipboardList,Command,FilePlus2,Home,LayoutDashboard,LogOut,Menu,Search,Settings2,ShieldCheck,SlidersHorizontal, X} from 'lucide-react';
 import {useAuth} from '../context/AuthContext';
+import {api} from '../lib/api';
 
 type NavItem = {label:string;path:string;icon:typeof Home};
 const officerNav:NavItem[]=[
@@ -25,6 +26,8 @@ export default function AppShell({children}:{children:ReactNode}){
  const [collapsed,setCollapsed]=useState(false); const [mobileOpen,setMobileOpen]=useState(false);
  const [search,setSearch]=useState('');const [profileOpen,setProfileOpen]=useState(false);
  const [notifsOpen,setNotifsOpen]=useState(false);
+ const [demo,setDemo]=useState(false);
+ useEffect(()=>{api<{demo_enabled:boolean}>('/api/auth/config').then(x=>setDemo(x.demo_enabled)).catch(()=>{});},[]);
  const nav=user?.role==='admin'?adminNav:user?.role==='officer'?officerNav:citizenNav;
  const current = [...nav,{label:'Settings',path:'/settings',icon:Settings2}].find(n=>n.path===location.pathname);
  const navlink=(item:NavItem)=><NavLink end={item.path==='/'} key={item.path} to={item.path} title={item.label} onClick={()=>setMobileOpen(false)} className={({isActive})=>`side-link ${isActive?'selected':''}`}><item.icon size={19}/><span>{item.label}</span></NavLink>;
@@ -37,7 +40,7 @@ export default function AppShell({children}:{children:ReactNode}){
        <div className="sidebar-label" style={{marginTop:30}}>ACCOUNT</div>
        <nav className="side-nav">{navlink({label:'Settings',path:'/settings',icon:Settings2})}</nav>
        <div className="sidebar-bottom">
-        <div className="pilot-card"><div className="pilot-icon"><ShieldCheck size={17}/></div><strong>Local demo environment</strong><p>Synthetic cases. AI predictions are simulated—not official UP decisions.</p><span><span className="online-dot"/> Sandbox active</span></div>
+        <div className="pilot-card"><div className="pilot-icon"><ShieldCheck size={17}/></div><strong>{demo?'Local demo environment':'Prototype workspace'}</strong><p>Example cases are synthetic. AI predictions are simulated, not official decisions.</p><span><span className="online-dot"/> {demo?'Sandbox active':'Account active'}</span></div>
         <button className="sidebar-collapse" onClick={()=>setCollapsed(x=>!x)} title="Collapse navigation"><SlidersHorizontal size={16}/><span>Collapse sidebar</span></button>
        </div>
      </div>
@@ -47,7 +50,7 @@ export default function AppShell({children}:{children:ReactNode}){
      <div className="topbar-left"><button className="icon-button mobile-menu" onClick={()=>setMobileOpen(true)} aria-label="Open menu"><Menu size={21}/></button><span className="breadcrumb-parent">Workspace</span><span className="breadcrumb-sep">/</span><span className="breadcrumb-current">{current?.label||'Case details'}</span></div>
      <div className="topbar-right">
        <form className="top-search" onSubmit={e=>{e.preventDefault();navigate(`/cases?search=${encodeURIComponent(search)}`);setSearch('');}}><Search size={17}/><input placeholder="Search cases, tickets..." aria-label="Search cases" value={search} onChange={e=>setSearch(e.target.value)}/><kbd>↵</kbd></form>
-       <span className="top-env"><span className="online-dot"/> DEMO</span>
+       {demo&&<span className="top-env"><span className="online-dot"/> DEMO</span>}
        <div className="top-popover-anchor"><button className="icon-button" title="Notifications" onClick={()=>{setNotifsOpen(x=>!x);setProfileOpen(false);}}><Bell size={20}/><span className="notif-indicator"/></button>
          {notifsOpen&&<div className="mini-popover notifications"><strong>Case alerts</strong><p>Open the grievance queue to review urgent cases and unresolved complaints.</p><button className="btn btn-primary btn-sm" onClick={()=>{navigate('/cases?priority=critical');setNotifsOpen(false);}}>View critical cases</button></div>}
        </div>

@@ -19,6 +19,7 @@ from .auth import (current_user, hash_password, verify_password, require_admin, 
                    SESSION_COOKIE, SESSION_SECONDS, SESSION_IDLE_SECONDS)
 from .data import CATEGORIES, DEPARTMENTS, DISTRICTS
 from .db import connect, initialize, iso, reset_demo
+from .account import router as account_router, mode, validate_config, password_policy
 
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', str(Path(__file__).resolve().parent.parent / 'uploads')))
 VALID_STATUSES = {'new','in_progress','escalated','resolved'}
@@ -26,19 +27,29 @@ VALID_PRIORITIES = {'low','medium','high','critical'}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_config()
     initialize()
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     if os.name == 'posix': UPLOAD_DIR.chmod(0o700)
     yield
 
-app = FastAPI(title='NagrikOS Demo API', version='1.0.0', lifespan=lifespan,
-              description='Fully local operational prototype. AI is deterministic and demo data is synthetic.')
-allowed_origins = [x.strip() for x in os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',') if x.strip()]
+app = FastAPI(title='NagrikOS API', version='1.0.0', lifespan=lifespan,
+              docs_url=None if mode() == 'public' else '/docs',
+              redoc_url=None if mode() == 'public' else '/redoc',
+              openapi_url=None if mode() == 'public' else '/openapi.json',
+              description='Independent civic workflow prototype. Seeded data is synthetic and AI outputs are illustrative.')
+allowed_origins = [x.strip() for x in os.environ.get('CORS_ORIGINS',
+                   'http://localhost:5173,http://127.0.0.1:5173' if mode() == 'demo' else '').split(',') if x.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True,
                    allow_methods=['GET','POST','PATCH','DELETE'], allow_headers=['Content-Type','X-CSRF-Token'])
+app.include_router(account_router)
 
 @app.middleware('http')
 async def security_headers_and_csrf(request: Request, call_next):
+    if mode() == 'demo' and request.url.path.startswith('/api/') and request.client and request.client.host not in {'127.0.0.1','::1','testclient'}:
+        return JSONResponse({'detail':'Local development mode only'}, status_code=403)
+    if mode() == 'demo' and request.url.path in {'/docs','/redoc','/openapi.json'} and request.client and request.client.host not in {'127.0.0.1','::1','testclient'}:
+        return JSONResponse({'detail':'Not found'}, status_code=404)
     # Deny cross-site state-changing API calls, even if a browser accidentally sends cookies.
     if request.url.path.startswith('/api/') and request.method in {'POST','PATCH','PUT','DELETE'}:
         origin = request.headers.get('origin')
@@ -55,6 +66,8 @@ async def security_headers_and_csrf(request: Request, call_next):
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['Permissions-Policy'] = 'camera=(), geolocation=()'
     response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
+    if mode() == 'public':
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
     elif request.url.path == '/' or request.url.path.startswith('/lite/'):
@@ -64,22 +77,26 @@ async def security_headers_and_csrf(request: Request, call_next):
 
 class LoginBody(BaseModel):
     email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1, max_length=128)
-    mfa_code: str = Field(default='', max_length=6)
+    password: str = Field(min_length=1, max_length=1024)
+
+class MFAChallengeBody(BaseModel):
+    challenge: str = Field(min_length=32, max_length=200)
+    code: str = Field(min_length=6, max_length=40)
 
 class PasswordChangeBody(BaseModel):
-    current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=12, max_length=128)
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=15, max_length=1024)
 
 class MFASetupBody(BaseModel):
-    current_password: str = Field(min_length=1, max_length=128)
+    current_password: str = Field(min_length=1, max_length=1024)
+    existing_code: str = Field(default='', max_length=40)
 
 class MFAConfirmBody(BaseModel):
     code: str = Field(min_length=6, max_length=6)
 
 class MFADisableBody(BaseModel):
-    current_password: str = Field(min_length=1, max_length=128)
-    code: str = Field(min_length=6, max_length=6)
+    current_password: str = Field(min_length=1, max_length=1024)
+    code: str = Field(min_length=6, max_length=40)
 
 class AnalyzeBody(BaseModel):
     title: str = Field(default='', max_length=200)
@@ -132,7 +149,7 @@ def add_history(db, complaint_id: int, actor: int | None, action: str, details: 
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok', 'service':'NagrikOS', 'mode':'offline-demo', 'ai':'mock-rules-v1'}
+    return {'status':'ok'}
 
 
 @app.get('/api/meta')
@@ -140,10 +157,50 @@ def meta():
     return {'districts':DISTRICTS,'departments':DEPARTMENTS,'categories':[
         {'name':cat['name'],'department':cat['department'],'sla_hours':cat['sla_hours']} for cat in CATEGORIES],
         'statuses':sorted(VALID_STATUSES),'priorities':['critical','high','medium','low'],
-        'is_demo':True,'data_disclaimer':'Seeded records are synthetic. Routing/urgency/ETA outputs are illustrative.'}
+        'is_demo':mode()=='demo','data_disclaimer':'Seeded records are synthetic. Routing/urgency/ETA outputs are illustrative.'}
 
 
 _DUMMY_PASSWORD_HASH = hash_password('nagrikos-invalid-unknown-account')
+
+def _sensitive_key(user_id: int, action: str) -> str:
+    return token_hash(f'sensitive:{action}:{user_id}')
+
+def _check_sensitive_limit(db, user_id: int, action: str) -> None:
+    cutoff=int(time.time())-900
+    if db.execute('SELECT COUNT(*) FROM login_attempts WHERE identifier=? AND attempted_at>=?',
+                  (_sensitive_key(user_id,action),cutoff)).fetchone()[0]>=5:
+        raise HTTPException(429,'Too many attempts. Try again later.')
+
+def _sensitive_failure(db, user_id: int, action: str) -> None:
+    db.execute('INSERT INTO login_attempts(identifier,attempted_at) VALUES (?,?)',
+               (_sensitive_key(user_id,action),int(time.time())))
+    db.commit()
+
+def _sensitive_success(db, user_id: int, action: str) -> None:
+    db.execute('DELETE FROM login_attempts WHERE identifier=?',(_sensitive_key(user_id,action),))
+
+def _create_session(db, row, response: Response, now: int) -> dict:
+    session = secrets.token_hex(32)
+    csrf = secrets.token_hex(32)
+    db.execute('DELETE FROM sessions WHERE expires_at<=?', (now,))
+    db.execute('INSERT INTO sessions (token_hash,user_id,csrf_hash,expires_at,created_at,last_seen_at) VALUES (?,?,?,?,?,?)',
+               (token_hash(session),row['id'],token_hash(csrf),now+SESSION_SECONDS,now,now))
+    apply_cookies(response,session,csrf)
+    return {'user':{k:row[k] for k in ('id','name','email','role','department','district')},
+            'session_expires_in':SESSION_SECONDS,'idle_timeout_seconds':SESSION_IDLE_SECONDS}
+
+def _use_factor(db, row, code: str, now: int) -> bool:
+    from .auth import decrypt_totp, totp_counter
+    counter = totp_counter(decrypt_totp(row['mfa_secret']), code, now, row['mfa_last_counter']) if len(code)==6 else None
+    if counter is not None:
+        changed=db.execute('UPDATE users SET mfa_last_counter=? WHERE id=? AND mfa_last_counter<?',
+                           (counter,row['id'],counter))
+        return changed.rowcount == 1
+    if len(code) > 40:
+        return False
+    digest = token_hash(code.strip().upper())
+    changed=db.execute('DELETE FROM recovery_codes WHERE user_id=? AND code_hash=?', (row['id'],digest))
+    return changed.rowcount == 1
 
 @app.post('/api/auth/login')
 def login(body: LoginBody, request: Request, response: Response):
@@ -154,38 +211,53 @@ def login(body: LoginBody, request: Request, response: Response):
     keys = [hashlib.sha256(f'account:{email}'.encode()).hexdigest(),
             hashlib.sha256(f'ip:{address}'.encode()).hexdigest()]
     with connect() as db:
-        db.execute('DELETE FROM login_attempts WHERE attempted_at < ?', (now - 900,))
-        counts = [db.execute('SELECT COUNT(*) FROM login_attempts WHERE identifier=?',
-                             (key,)).fetchone()[0] for key in keys]
+        db.execute('DELETE FROM login_attempts WHERE attempted_at < ?', (now - 3600,))
+        counts = [db.execute('SELECT COUNT(*) FROM login_attempts WHERE identifier=? AND attempted_at>=?',
+                             (key,now-900)).fetchone()[0] for key in keys]
         if max(counts) >= 8:
             raise HTTPException(429, 'Too many sign-in attempts. Try again after 15 minutes.')
-        row = db.execute('SELECT * FROM users WHERE lower(email)=?', (email,)).fetchone()
+        row = db.execute('SELECT * FROM users WHERE email_canonical=?', (email,)).fetchone()
         valid, rehash = verify_password(body.password, row['password_hash'], row['id']) if row else (False, False)
         if not row:
             # Execute one expensive dummy hash to reduce account-existence timing leakage.
             verify_password(body.password, _DUMMY_PASSWORD_HASH, 0)
-        if valid and row['mfa_secret']:
-            counter = totp_counter(decrypt_totp(row['mfa_secret']),body.mfa_code,now,row['mfa_last_counter'])
-            if counter is None: valid=False
-        else: counter=None
+        if row and (row['email_verified_at'] is None or (mode() != 'demo' and row['is_demo']) or
+                    (row['is_demo'] and request.client and request.client.host not in {'127.0.0.1','::1','testclient'})):
+            valid = False
         if not valid:
             db.executemany('INSERT INTO login_attempts VALUES (?,?)', [(key, now) for key in keys])
             db.commit()  # Failed attempts must persist even when an HTTP error is raised.
             raise HTTPException(401, 'Incorrect email or password')
         # On successful login, clear this account's failures but retain IP failures.
         db.execute('DELETE FROM login_attempts WHERE identifier=?', (keys[0],))
-        if counter is not None:
-            db.execute('UPDATE users SET mfa_last_counter=? WHERE id=?', (counter,row['id']))
         if rehash:
             db.execute('UPDATE users SET password_hash=? WHERE id=?', (hash_password(body.password), row['id']))
-        session = secrets.token_hex(32)
-        csrf = secrets.token_hex(32)
-        db.execute('DELETE FROM sessions WHERE expires_at<=?', (now,))
-        db.execute('INSERT INTO sessions (token_hash,user_id,csrf_hash,expires_at,created_at,last_seen_at) VALUES (?,?,?,?,?,?)',
-                   (token_hash(session), row['id'], token_hash(csrf), now + SESSION_SECONDS, now, now))
-    apply_cookies(response, session, csrf)
-    user = {k: row[k] for k in ('id','name','email','role','department','district')}
-    return {'user':user,'session_expires_in':SESSION_SECONDS,'idle_timeout_seconds':SESSION_IDLE_SECONDS}
+        if row['mfa_secret']:
+            _check_sensitive_limit(db,row['id'],'mfa-challenge')
+            challenge=secrets.token_urlsafe(32)
+            db.execute('DELETE FROM auth_challenges WHERE user_id=?', (row['id'],))
+            db.execute('INSERT INTO auth_challenges VALUES (?,?,?,0)', (token_hash(challenge),row['id'],now+300))
+            return {'mfa_required':True,'challenge':challenge,'expires_in':300}
+        return _create_session(db,row,response,now)
+
+@app.post('/api/auth/mfa/challenge')
+def complete_mfa(body: MFAChallengeBody, response: Response):
+    now=int(time.time())
+    with connect() as db:
+        challenge=db.execute('SELECT * FROM auth_challenges WHERE token_hash=?', (token_hash(body.challenge),)).fetchone()
+        if not challenge or challenge['expires_at']<=now or challenge['attempts']>=5:
+            raise HTTPException(401,'Verification expired. Sign in again.')
+        row=db.execute('SELECT * FROM users WHERE id=?', (challenge['user_id'],)).fetchone()
+        if not row or not row['mfa_secret'] or (mode()!='demo' and row['is_demo']):
+            raise HTTPException(401,'Verification expired. Sign in again.')
+        _check_sensitive_limit(db,row['id'],'mfa-challenge')
+        if not _use_factor(db,row,body.code,now):
+            db.execute('UPDATE auth_challenges SET attempts=attempts+1 WHERE token_hash=?',(challenge['token_hash'],))
+            _sensitive_failure(db,row['id'],'mfa-challenge')
+            raise HTTPException(401,'Invalid verification code')
+        _sensitive_success(db,row['id'],'mfa-challenge')
+        db.execute('DELETE FROM auth_challenges WHERE user_id=?',(row['id'],))
+        return _create_session(db,row,response,now)
 
 
 @app.post('/api/auth/logout')
@@ -215,14 +287,19 @@ def security_settings(user: dict = Depends(current_user)):
 def change_password(body: PasswordChangeBody, response: Response, user: dict = Depends(current_user)):
     if body.new_password == body.current_password:
         raise HTTPException(422, 'New password must be different')
-    if body.new_password.casefold() in ('password1234','password12345','demo123demo123'):
-        raise HTTPException(422, 'Choose a less common password')
+    password_policy(body.new_password)
     with connect() as db:
+        _check_sensitive_limit(db,user['id'],'password')
         row = db.execute('SELECT password_hash FROM users WHERE id=?', (user['id'],)).fetchone()
         valid, _ = verify_password(body.current_password, row['password_hash'], user['id'])
-        if not valid: raise HTTPException(403, 'Current password is incorrect')
+        if not valid:
+            _sensitive_failure(db,user['id'],'password')
+            raise HTTPException(403, 'Current password is incorrect')
+        _sensitive_success(db,user['id'],'password')
         db.execute('UPDATE users SET password_hash=? WHERE id=?', (hash_password(body.new_password),user['id']))
         db.execute('DELETE FROM sessions WHERE user_id=?', (user['id'],))
+        db.execute('DELETE FROM auth_challenges WHERE user_id=?', (user['id'],))
+        db.execute('DELETE FROM account_tokens WHERE user_id=?', (user['id'],))
     remove_cookies(response)
     return {'ok': True, 'message':'Password changed. Sign in again on all devices.'}
 
@@ -230,44 +307,77 @@ def change_password(body: PasswordChangeBody, response: Response, user: dict = D
 @app.post('/api/auth/mfa/setup')
 def setup_mfa(body: MFASetupBody, user: dict = Depends(current_user)):
     with connect() as db:
-        row = db.execute('SELECT password_hash,mfa_secret FROM users WHERE id=?', (user['id'],)).fetchone()
+        _check_sensitive_limit(db,user['id'],'mfa-setup')
+        row = db.execute('SELECT * FROM users WHERE id=?', (user['id'],)).fetchone()
         valid,_ = verify_password(body.current_password,row['password_hash'],user['id'])
-        if not valid: raise HTTPException(403, 'Current password is incorrect')
-        if row['mfa_secret']: raise HTTPException(409,'Two-step verification is already active')
+        if not valid:
+            _sensitive_failure(db,user['id'],'mfa-setup')
+            raise HTTPException(403, 'Current password is incorrect')
+        if row['mfa_secret'] and not _use_factor(db,row,body.existing_code,int(time.time())):
+            _sensitive_failure(db,user['id'],'mfa-setup')
+            raise HTTPException(403,'Enter a current authenticator or recovery code to replace the factor')
+        _sensitive_success(db,user['id'],'mfa-setup')
         secret = generate_totp_secret()
-        db.execute('UPDATE users SET mfa_pending=? WHERE id=?', (encrypt_totp(secret),user['id']))
+        db.execute('UPDATE users SET mfa_pending=?,mfa_pending_expires_at=?,mfa_pending_attempts=0 WHERE id=?',
+                   (encrypt_totp(secret),int(time.time())+600,user['id']))
     from urllib.parse import quote
     label=quote(f'NagrikOS:{user["email"]}')
     uri=f'otpauth://totp/{label}?secret={secret}&issuer=NagrikOS&algorithm=SHA1&digits=6&period=30'
-    return {'secret':secret,'otpauth_uri':uri,'message':'Add the key to your authenticator, then confirm a code.'}
+    import base64, io, qrcode
+    from qrcode.image.svg import SvgPathImage
+    qr=qrcode.make(uri,image_factory=SvgPathImage)
+    out=io.BytesIO();qr.save(out)
+    return {'secret':secret,'otpauth_uri':uri,'qr_svg':'data:image/svg+xml;base64,'+base64.b64encode(out.getvalue()).decode(),
+            'expires_in':600,'message':'Scan the QR code or enter the key, then confirm a code.'}
 
 
 @app.post('/api/auth/mfa/enable')
-def enable_mfa(body: MFAConfirmBody, request: Request, user: dict = Depends(current_user)):
+def enable_mfa(body: MFAConfirmBody, response: Response, user: dict = Depends(current_user)):
     with connect() as db:
-        row = db.execute('SELECT mfa_pending,mfa_secret FROM users WHERE id=?', (user['id'],)).fetchone()
-        if row['mfa_secret'] or not row['mfa_pending']:
+        row = db.execute('SELECT mfa_pending,mfa_secret,mfa_pending_expires_at,mfa_pending_attempts FROM users WHERE id=?', (user['id'],)).fetchone()
+        if not row['mfa_pending'] or not row['mfa_pending_expires_at'] or row['mfa_pending_expires_at']<=int(time.time()):
             raise HTTPException(409, 'Start setup before enabling two-step verification')
+        if row['mfa_pending_attempts']>=5:
+            raise HTTPException(429,'Too many attempts. Restart setup.')
         counter=totp_counter(decrypt_totp(row['mfa_pending']),body.code)
-        if counter is None: raise HTTPException(422,'Invalid authenticator code')
-        db.execute('UPDATE users SET mfa_secret=mfa_pending,mfa_pending=NULL,mfa_last_counter=? WHERE id=?', (counter,user['id']))
-        # Existing sessions issued before enrollment are revoked except the current session.
-        # This prevents an attacker holding an older cookie from retaining access.
-        db.execute('DELETE FROM sessions WHERE user_id=? AND token_hash!=?',
-                   (user['id'],token_hash(request.cookies[SESSION_COOKIE])))
-    return {'ok': True}
+        if counter is None:
+            db.execute('UPDATE users SET mfa_pending_attempts=mfa_pending_attempts+1 WHERE id=?',(user['id'],))
+            db.commit()
+            raise HTTPException(422,'Invalid authenticator code')
+        db.execute('UPDATE users SET mfa_secret=mfa_pending,mfa_pending=NULL,mfa_pending_expires_at=NULL,'
+                   'mfa_pending_attempts=0,mfa_last_counter=? WHERE id=?', (counter,user['id']))
+        db.execute('DELETE FROM recovery_codes WHERE user_id=?',(user['id'],))
+        recovery=[secrets.token_hex(10).upper() for _ in range(10)]
+        db.executemany('INSERT INTO recovery_codes(code_hash,user_id,created_at) VALUES (?,?,?)',
+                       [(token_hash(code),user['id'],int(time.time())) for code in recovery])
+        # Rotate the current session and revoke all sessions issued before enrollment.
+        db.execute('DELETE FROM sessions WHERE user_id=?',(user['id'],))
+        _create_session(db,user,response,int(time.time()))
+    return {'ok': True,'recovery_codes':recovery}
+
+@app.post('/api/auth/mfa/cancel')
+def cancel_mfa(user: dict = Depends(current_user)):
+    with connect() as db:
+        db.execute('UPDATE users SET mfa_pending=NULL,mfa_pending_expires_at=NULL,mfa_pending_attempts=0 WHERE id=?',(user['id'],))
+    return {'ok':True}
 
 
 @app.post('/api/auth/mfa/disable')
 def disable_mfa(body: MFADisableBody, response: Response, user: dict = Depends(current_user)):
     with connect() as db:
-        row = db.execute('SELECT password_hash,mfa_secret,mfa_last_counter FROM users WHERE id=?', (user['id'],)).fetchone()
+        _check_sensitive_limit(db,user['id'],'mfa-disable')
+        row = db.execute('SELECT * FROM users WHERE id=?', (user['id'],)).fetchone()
         valid,_ = verify_password(body.current_password,row['password_hash'],user['id'])
-        if not valid: raise HTTPException(403,'Current password is incorrect')
+        if not valid:
+            _sensitive_failure(db,user['id'],'mfa-disable')
+            raise HTTPException(403,'Current password is incorrect')
         if not row['mfa_secret']: raise HTTPException(409,'Two-step verification is not enabled')
-        counter=totp_counter(decrypt_totp(row['mfa_secret']),body.code,last=row['mfa_last_counter'])
-        if counter is None: raise HTTPException(422,'Invalid authenticator code')
-        db.execute('UPDATE users SET mfa_secret=NULL,mfa_pending=NULL,mfa_last_counter=-1 WHERE id=?', (user['id'],))
+        if not _use_factor(db,row,body.code,int(time.time())):
+            _sensitive_failure(db,user['id'],'mfa-disable')
+            raise HTTPException(422,'Invalid authenticator or recovery code')
+        _sensitive_success(db,user['id'],'mfa-disable')
+        db.execute('UPDATE users SET mfa_secret=NULL,mfa_pending=NULL,mfa_last_counter=-1,mfa_pending_expires_at=NULL WHERE id=?', (user['id'],))
+        db.execute('DELETE FROM recovery_codes WHERE user_id=?',(user['id'],))
         db.execute('DELETE FROM sessions WHERE user_id=?', (user['id'],))
     remove_cookies(response)
     return {'ok':True,'message':'Two-step verification disabled. Sign in again.'}
@@ -643,6 +753,8 @@ def export_complaints(user: dict=Depends(require_admin)):
 
 @app.post('/api/admin/reset-demo')
 def reset(user: dict=Depends(require_admin)):
+    if mode() != 'demo':
+        raise HTTPException(404,'Not found')
     reset_demo()
     for old_photo in UPLOAD_DIR.glob('*'):
         if old_photo.is_file() and re.fullmatch(r'[a-f0-9]{24}\.(?:png|jpg|jpeg|webp)',old_photo.name):
@@ -661,6 +773,6 @@ def lite_home():
 
 @app.get('/lite/{filename}', include_in_schema=False)
 def lite_asset(filename: str):
-    if filename not in ('app.js', 'style.css'):
+    if filename not in ('app.js', 'account-ui.js', 'account-settings.js', 'style.css'):
         raise HTTPException(404, 'Asset not found')
     return FileResponse(LITE_DIR / filename)
