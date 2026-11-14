@@ -65,7 +65,7 @@ def test_idle_timeout_and_password_change(client):
     with connect() as db:
         db.execute('UPDATE sessions SET last_seen_at=? WHERE token_hash=?',(int(time.time())-1900,token_hash(token)))
     assert client.get('/api/dashboard',headers=admin).status_code==401
-    assert client.post('/api/admin/reset-demo',headers=admin,json={}).status_code==403
+    assert client.post('/api/admin/reset-demo',headers=admin,json={}).status_code==401
     admin=login(client)
     wrong=client.post('/api/auth/password',headers=admin,json={'current_password':'bad','new_password':'a-very-long-new-password'})
     assert wrong.status_code==403

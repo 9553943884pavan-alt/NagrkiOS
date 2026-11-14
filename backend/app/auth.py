@@ -144,15 +144,17 @@ def verify_csrf(request: Request) -> None:
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return  # Let the endpoint's auth dependency return 401.
-    header = request.headers.get('X-CSRF-Token', '')
-    cookie = request.cookies.get(CSRF_COOKIE, '')
-    if not header or not cookie or not hmac.compare_digest(header, cookie):
-        raise HTTPException(403, 'Missing or invalid CSRF token')
     from .db import connect
     with connect() as db:
         row = db.execute('SELECT csrf_hash FROM sessions WHERE token_hash=? AND expires_at>? AND last_seen_at>?',
                          (token_hash(token), int(time.time()), int(time.time()) - SESSION_IDLE_SECONDS)).fetchone()
-    if not row or not hmac.compare_digest(token_hash(header), row['csrf_hash']):
+    if not row:
+        return  # Expired cookies must not block public recovery; protected routes still require auth.
+    header = request.headers.get('X-CSRF-Token', '')
+    cookie = request.cookies.get(CSRF_COOKIE, '')
+    if not header or not cookie or not hmac.compare_digest(header, cookie):
+        raise HTTPException(403, 'Missing or invalid CSRF token')
+    if not hmac.compare_digest(token_hash(header), row['csrf_hash']):
         raise HTTPException(403, 'Session security check failed')
 
 

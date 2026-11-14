@@ -51,13 +51,23 @@ def test_citizen_signup_verification_recovery_and_enumeration(client):
         assert (row['role'],row['department'],row['email_canonical'],row['email_verified_at'])==('citizen',None,'new@example.com',None)
         assert row['is_demo']==1
         assert db.execute('SELECT COUNT(*) FROM users WHERE email_canonical=?',('new@example.com',)).fetchone()[0]==1
+    duplicate_pending=client.post('/api/auth/signup',json={**payload,'name':'Impersonator',
+                                                             'password':'attacker chosen phrase 123'})
+    assert duplicate_pending.status_code==202 and duplicate_pending.json()==signup.json()
     verify=mailed_token()
-    assert client.post('/api/auth/verify-email',json={'token':verify}).status_code==200
-    assert client.post('/api/auth/verify-email',json={'token':verify}).status_code==400
+    assert client.post('/api/auth/verify-email',json={'token':verify,'password':'attacker chosen phrase 123'}).status_code==400
+    with connect() as db:
+        assert db.execute('SELECT attempts FROM account_tokens WHERE token_hash=?',
+                          (hashlib.sha256(verify.encode()).hexdigest(),)).fetchone()['attempts']==1
+    assert client.post('/api/auth/verify-email',json={'token':verify,'password':pwd}).status_code==200
+    assert client.post('/api/auth/verify-email',json={'token':verify,'password':pwd}).status_code==400
     duplicate=client.post('/api/auth/signup',json=payload)
     assert duplicate.status_code==202 and duplicate.json()==signup.json()
     signed=client.post('/api/auth/login',json={'email':'new@example.com','password':pwd})
     assert signed.status_code==200 and signed.json()['user']['role']=='citizen'
+    assert signed.json()['user']['name']=='New Citizen'
+    assert client.post('/api/auth/login',json={'email':'new@example.com',
+                                               'password':'attacker chosen phrase 123'}).status_code==401
     assert client.patch('/api/auth/me',headers=csrf(client),json={'role':'admin'}).status_code==405
     known=client.post('/api/auth/forgot-password',headers=csrf(client),json={'email':'new@example.com'})
     unknown=client.post('/api/auth/forgot-password',headers=csrf(client),json={'email':'unknown@example.com'})
@@ -129,6 +139,11 @@ def test_staff_invitation_is_admin_only_and_department_scoped(client):
     assert client.post('/api/auth/staff-invitations',headers=csrf(client),json={**body,'department':'Invented desk'}).status_code==422
     invited=client.post('/api/auth/staff-invitations',headers=csrf(client),json=body)
     assert invited.status_code==202,invited.text
+    citizen_attempt=client.post('/api/auth/signup',headers=csrf(client),json={
+        'name':'Wrong Citizen','email':'invited@example.com','password':'citizen collision phrase 123'})
+    assert citizen_attempt.status_code==202
+    with connect() as db:
+        assert db.execute('SELECT 1 FROM users WHERE email_canonical=?',('invited@example.com',)).fetchone() is None
     token=mailed_token()
     accepted=client.post('/api/auth/accept-invitation',headers=csrf(client),json={'token':token,'password':'officer unique phrase 123'})
     assert accepted.status_code==200,accepted.text
@@ -209,6 +224,19 @@ def test_unverified_signup_stays_unverified_on_restart(client):
     assert client.post('/api/auth/login',json={'email':'pending@example.com','password':'unique pending phrase 123'}).status_code==401
 
 
+def test_verification_password_attempts_are_bounded(client):
+    password='unique verification phrase 123'
+    assert client.post('/api/auth/signup',json={'name':'Verification Person','email':'verify@example.com',
+                                                 'password':password}).status_code==202
+    token=mailed_token()
+    assert client.post('/api/auth/verify-email',json={'token':token}).status_code==422
+    for _ in range(5):
+        assert client.post('/api/auth/verify-email',json={'token':token,
+                                                          'password':'wrong verification phrase'}).status_code==400
+    assert client.post('/api/auth/verify-email',json={'token':token,'password':password}).status_code==400
+    assert client.post('/api/auth/login',json={'email':'verify@example.com','password':password}).status_code==401
+
+
 def test_missing_mode_fails_startup(tmp_path, monkeypatch):
     monkeypatch.delenv('NAGRIKOS_MODE',raising=False)
     monkeypatch.setenv('DATABASE_PATH',str(tmp_path/'never-created.db'))
@@ -268,7 +296,8 @@ def test_public_smtp_transport_and_no_link_in_response(tmp_path, monkeypatch):
         with connect() as db:
             assert db.execute('SELECT is_demo FROM users WHERE email_canonical=?',('public@example.com',)).fetchone()['is_demo']==0
         token=re.search(r'#verify=([^\s]+)',messages[0].get_content()).group(1)
-        assert public.post('/api/auth/verify-email',json={'token':token}).status_code==200
+        assert public.post('/api/auth/verify-email',json={'token':token,
+                                                           'password':'unique public phrase 123'}).status_code==200
         signed=public.post('/api/auth/login',json={'email':'public@example.com','password':'unique public phrase 123'})
         assert signed.status_code==200
         assert 'secure' in signed.headers['set-cookie'].lower()

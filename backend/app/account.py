@@ -154,12 +154,12 @@ def issue_token(db, user_id: int, purpose: str, ttl: int = 1800) -> str:
 def consume_token(db, token: str, purpose: str):
     if len(token) > 200:
         raise HTTPException(400, 'Link is invalid or expired')
-    row = db.execute('SELECT * FROM account_tokens WHERE token_hash=? AND purpose=?',
-                     (token_hash(token), purpose)).fetchone()
     now = int(time.time())
-    if not row or row['used_at'] or row['expires_at'] <= now or row['attempts'] >= 5:
+    row = db.execute('UPDATE account_tokens SET used_at=?,attempts=attempts+1 '
+                     'WHERE token_hash=? AND purpose=? AND used_at IS NULL AND expires_at>? AND attempts<5 '
+                     'RETURNING *', (now, token_hash(token), purpose, now)).fetchone()
+    if not row:
         raise HTTPException(400, 'Link is invalid or expired')
-    db.execute('UPDATE account_tokens SET attempts=attempts+1 WHERE token_hash=?', (row['token_hash'],))
     return row
 
 
@@ -176,6 +176,10 @@ class EmailBody(BaseModel):
 
 class TokenBody(BaseModel):
     token: str = Field(min_length=20, max_length=200)
+
+
+class VerifyEmailBody(TokenBody):
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class ResetBody(TokenBody):
@@ -205,13 +209,19 @@ def signup(body: Signup, request: Request):
             return {'message': 'If this address can be registered, check your email for a verification link.'}
         db.commit()
         password_policy(body.password)
+        pending_invite = db.execute('SELECT 1 FROM staff_invitations WHERE email=? AND used_at IS NULL '
+                                    'AND expires_at>? LIMIT 1', (email, int(time.time()))).fetchone()
+        if pending_invite:
+            hash_password(body.password)
+            return {'message': 'If this address can be registered, check your email for a verification link.'}
         row = db.execute('SELECT id,email_verified_at FROM users WHERE email_canonical=?', (email,)).fetchone()
         if row and row['email_verified_at']:
             hash_password(body.password)  # Similar work for existing and new addresses.
             return {'message': 'If this address can be registered, check your email for a verification link.'}
         if row:
+            # A duplicate request must not replace a pending account's credentials.
+            hash_password(body.password)
             user_id = row['id']
-            db.execute('UPDATE users SET name=?,password_hash=? WHERE id=?', (name, hash_password(body.password), user_id))
         else:
             user_id=db.execute('INSERT INTO users(name,email,email_canonical,password_hash,role,department,district,created_at,is_demo) '
                                'VALUES (?,?,?,?,?,?,?,?,?) RETURNING id',
@@ -219,17 +229,28 @@ def signup(body: Signup, request: Request):
                                 time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),int(mode()=='demo'))).fetchone()[0]
         token = issue_token(db, user_id, 'verify', 1800)
         link = os.getenv('PUBLIC_BASE_URL', 'http://127.0.0.1:8000').rstrip('/') + '/#verify=' + quote(token)
-        send_mail(db, email, 'Verify your NagrikOS email', 'Open this link within 30 minutes to verify your email:\n' + link)
+        send_mail(db, email, 'Verify your NagrikOS email',
+                  'Open this link within 30 minutes and enter the password you chose when signing up to verify your email:\n' + link)
     return {'message': 'If this address can be registered, check your email for a verification link.'}
 
 
 @router.post('/verify-email')
-def verify_email(body: TokenBody, request: Request):
+def verify_email(body: VerifyEmailBody, request: Request):
     with connect() as db:
         limited=throttle(db,request,'verify-token',token_hash(body.token),10,900)
         db.commit()
         if limited:
             raise HTTPException(429,'Too many attempts. Try again later.')
+        row = db.execute('SELECT * FROM account_tokens WHERE token_hash=? AND purpose=?',
+                         (token_hash(body.token), 'verify')).fetchone()
+        if not row or row['used_at'] or row['expires_at'] <= int(time.time()) or row['attempts'] >= 5:
+            raise HTTPException(400, 'Link is invalid or expired')
+        user = db.execute('SELECT password_hash FROM users WHERE id=?', (row['user_id'],)).fetchone()
+        if not user or not verify_password(body.password, user['password_hash'], row['user_id'])[0]:
+            db.execute('UPDATE account_tokens SET attempts=attempts+1 WHERE token_hash=? AND used_at IS NULL',
+                       (row['token_hash'],))
+            db.commit()
+            raise HTTPException(400, 'Link or password is invalid')
         row = consume_token(db, body.token, 'verify')
         db.execute('UPDATE users SET email_verified_at=? WHERE id=?', (int(time.time()), row['user_id']))
         db.execute('UPDATE account_tokens SET used_at=? WHERE user_id=? AND purpose=?',
@@ -343,8 +364,10 @@ def accept_invitation(body: AcceptInvite, request: Request):
         if limited:
             raise HTTPException(429,'Too many attempts. Try again later.')
         password_policy(body.password)
-        row = db.execute('SELECT * FROM staff_invitations WHERE token_hash=?', (token_hash(body.token),)).fetchone()
-        if not row or row['used_at'] or row['expires_at'] <= int(time.time()):
+        row = db.execute('UPDATE staff_invitations SET used_at=? WHERE token_hash=? '
+                         'AND used_at IS NULL AND expires_at>? RETURNING *',
+                         (int(time.time()), token_hash(body.token), int(time.time()))).fetchone()
+        if not row:
             raise HTTPException(400, 'Invitation is invalid or expired')
         if db.execute('SELECT 1 FROM users WHERE email_canonical=?', (row['email'],)).fetchone():
             raise HTTPException(409, 'Account already exists')
@@ -352,5 +375,4 @@ def accept_invitation(body: AcceptInvite, request: Request):
                    'VALUES (?,?,?,?,?,?,?,?,?,?)',
                    (row['name'],row['email'],row['email'],hash_password(body.password),row['role'],row['department'],
                     row['district'],time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),int(time.time()),int(mode()=='demo')))
-        db.execute('UPDATE staff_invitations SET used_at=? WHERE token_hash=?', (int(time.time()),row['token_hash']))
     return {'message':'Account ready. Sign in.'}

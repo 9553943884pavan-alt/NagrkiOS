@@ -44,10 +44,15 @@ def test_opaque_session_http_only_expiry_and_csrf(client):
 
 def test_expired_session_and_login_throttling(client):
     admin=login(client)
+    assert client.post('/api/auth/forgot-password',headers={'Cookie':admin['Cookie']},
+                       json={'email':'admin@demo.in'}).status_code==403
     token=admin['Cookie'].split(';')[0].split('=',1)[1]
     with connect() as db:
         db.execute('UPDATE sessions SET expires_at=? WHERE token_hash=?', (int(time.time())-1,token_hash(token)))
     assert client.get('/api/auth/me',headers=admin).status_code==401
+    assert client.post('/api/auth/forgot-password',headers={'Cookie':admin['Cookie']},
+                       json={'email':'admin@demo.in'}).status_code==202
+    assert client.post('/api/admin/reset-demo',headers={'Cookie':admin['Cookie']},json={}).status_code==401
     for i in range(8):
         assert client.post('/api/auth/login',json={'email':'unknown@demo.in','password':'bad'}).status_code==401
     assert client.post('/api/auth/login',json={'email':'unknown@demo.in','password':'bad'}).status_code==429
