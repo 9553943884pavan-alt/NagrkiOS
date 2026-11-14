@@ -2,7 +2,7 @@
 
 **Current authentication workflow:** citizen signup and email verification, password recovery, two-step verification with recovery codes, and administrator-only staff invitations are documented in [`docs/AUTH_SECURITY_V5.md`](docs/AUTH_SECURITY_V5.md). See [`docs/AUTH_VALIDATION_V5.md`](docs/AUTH_VALIDATION_V5.md) for current test results. The v4 notes below are historical.
 
-**Render Free + Vercel deployment:** Follow [docs/RENDER_VERCEL_DEPLOYMENT.md](docs/RENDER_VERCEL_DEPLOYMENT.md). It covers the Vercel `/api` rewrite, Neon migration, public-mode secrets, administrator bootstrap, and smoke checks. Live Neon migration and Brevo delivery are pending verification; uploaded files are not durable on Render Free. The local-demo guidance below is historical and does not describe a public deployment.
+**Render Free + Vercel deployment:** Follow [docs/RENDER_VERCEL_DEPLOYMENT.md](docs/RENDER_VERCEL_DEPLOYMENT.md). It covers the Vercel `/api` rewrite, Neon migration, public-mode secrets, administrator bootstrap, and smoke checks. Live Neon migration and email delivery still require verification before public use; uploaded files are not durable on Render Free. The local-demo guidance below does not describe a public deployment.
 
 A **v4 audited and security-upgraded, runnable full-stack demo** of a common intake, routing, and tracking pipeline for citizen grievances. It includes a detailed React dashboard, a FastAPI API, local SQLite storage with an optional Neon PostgreSQL path, and deterministic **mock** AI recommendations. All 520 initial grievances are **synthetic**; this is **not** the UP government's Jansunwai or CM Helpline service.
 
@@ -15,64 +15,67 @@ A **v4 audited and security-upgraded, runnable full-stack demo** of a common int
 
 This is an audited iteration of the v3 design. It retains the same React colors, sidebar, chart layout and dropdown styling, with more robust backend/frontend integration and strengthened **local-demo** authentication. Main upgrades: Argon2id password hashing and automatic old-hash migration; Settings password change; optional TOTP authenticator-app verification; idle session expiry; better citizen dashboard totals; stricter image validation and EXIF removal; minimized officer roster; more precise mock keyword matching; updated Vite 6.4.6 baseline; and synchronized fallback UI security settings.
 
-Read [`docs/AUDIT_V4.md`](docs/AUDIT_V4.md), [`docs/VALIDATION_V4.md`](docs/VALIDATION_V4.md) and [`docs/ML_SCOPE_V4.md`](docs/ML_SCOPE_V4.md) for the complete test results, limitations and feature scope. **27 backend integration/security tests passed.** The full React npm build and browser clicks must still be verified on your Windows machine because npm registry and browser binaries were unavailable in the creation environment.
+Read [`docs/AUDIT_V4.md`](docs/AUDIT_V4.md), [`docs/VALIDATION_V4.md`](docs/VALIDATION_V4.md) and [`docs/ML_SCOPE_V4.md`](docs/ML_SCOPE_V4.md) for v4 results and feature scope. See [`docs/AUTH_VALIDATION_V5.md`](docs/AUTH_VALIDATION_V5.md) for authentication coverage and limitations.
 
 **Migrating v3 data:** stop both servers; back up your old `backend/data/nagrikos.db` and `backend/uploads/` before copying them into this folder. The database schema migrates automatically at startup without deleting existing cases. Legacy password hashes upgrade on successful login. Do not copy over any active test database, and back up your TOTP key separately if you enable MFA.
 
 **Neon PostgreSQL:** [docs/NEON_POSTGRESQL.md](docs/NEON_POSTGRESQL.md) explains the pooled application URL, direct Alembic URL, verified SQLite copy, development-branch testing, and rollback. Keep the original SQLite database and upload directory until migration is verified.
 
-## 1. Quick start in VS Code on Windows
+## 1. Clone and run locally
 
-Install **Python 3.11+** and, for the enhanced frontend, **Node.js 20+**. Open this entire extracted folder in VS Code.
+Install [Git](https://git-scm.com/downloads), **Python 3.11+**, and **Node.js 20+**. Use two terminals: one for FastAPI and one for React. The commands below start the local SQLite demo on `127.0.0.1`; leave `DATABASE_URL` and `DIRECT_URL` empty in demo mode. Do not commit `backend/.env`.
 
-**Terminal 1 — backend (required)**
+### Windows 11 / PowerShell
+
+In Terminal 1:
 
 ```powershell
+git clone https://github.com/9553943884pavan-alt/NagrkiOS.git
+cd NagrkiOS
+Copy-Item .env.example backend\.env
 cd backend
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-$env:NAGRIKOS_MODE='demo'
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --env-file .env --reload --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000` to try the **complete no-install fallback UI**, or `http://127.0.0.1:8000/docs` for interactive API documentation.
-
-**Terminal 2 — enhanced React frontend (optional)**
+Open Terminal 2 at the cloned `NagrkiOS` repository root:
 
 ```powershell
 cd frontend
-npm install
-npm run build
+npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173` and log in. Vite proxies `/api` to port 8000.
+Open **http://127.0.0.1:5173** for the React app. Vite forwards `/api` to FastAPI on port 8000. The backend also serves a no-install browser UI at **http://127.0.0.1:8000**; React and Node.js are optional if you use that UI. Demo login details are in the next section.
 
-If npm reports an unreviewed install script, run `npm approve-scripts --allow-scripts-pending`, review the package/version, and use `npm approve-scripts esbuild` **only if needed** (then `npm rebuild esbuild`). Never approve all scripts just to hide a warning. A funding notice is informational; it needs no fix. Check resolved dependencies using `npm ls recharts esbuild`. **The full React build was not available for verification in the creation environment; run `npm run build` on your Windows laptop.**
+### macOS / Linux
 
-> Prefer double-click launchers? Run `scripts/start_backend_windows.bat` and `scripts/start_frontend_windows.bat` from Windows Explorer (or from a terminal). Start the backend first.
-
-## 2. Quick start on macOS / Linux
+In Terminal 1:
 
 ```bash
+git clone https://github.com/9553943884pavan-alt/NagrkiOS.git
+cd NagrkiOS
+cp .env.example backend/.env
 cd backend
 python3 -m venv .venv
 ./.venv/bin/python -m pip install -r requirements.txt
-export NAGRIKOS_MODE=demo
-./.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+./.venv/bin/python -m uvicorn app.main:app --env-file .env --reload --host 127.0.0.1 --port 8000
 ```
 
-For the enhanced UI, open a second terminal:
+Open Terminal 2 at the cloned `NagrkiOS` repository root:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-The no-install UI works on port 8000 even when `npm install` is unavailable.
+The URLs are the same as on Windows. To run backend tests, use `.\.venv\Scripts\python.exe -m pytest -q` from `backend` on Windows or `./.venv/bin/python -m pytest -q` on macOS/Linux. Run `npm run typecheck` and `npm run build` from `frontend` when you want to verify a production build.
 
-## 3. Demo credentials
+The copied `.env.example` selects `NAGRIKOS_MODE=demo`. If you already have a `backend/.env`, keep it and edit it instead of overwriting it. Signup and password recovery require configured, working email delivery; demo login and grievance workflows work without email. For a public Render/Vercel setup, follow [the deployment guide](docs/RENDER_VERCEL_DEPLOYMENT.md) instead of these local-demo commands.
+
+## 2. Demo credentials
 
 All freshly seeded accounts initially use password **`demo123`**. You can change each password in Settings; then only the new password works. Optional authenticator verification adds a second sign-in step.
 
@@ -86,7 +89,7 @@ All freshly seeded accounts initially use password **`demo123`**. You can change
 
 Passwords are demonstration-only and the login system must **not** be exposed on the public Internet.
 
-## 4. Working features
+## 3. Working features
 
 | Feature | Works? | Notes |
 | --- | --- | --- |
@@ -107,7 +110,7 @@ Passwords are demonstration-only and the login system must **not** be exposed on
 | Reset sample data | Yes | Admin only; restores the 520 fictional entries |
 | External government integration | **No** | No official government APIs or records used |
 
-## 5. Demo flow (5 minutes)
+## 4. Demo flow (5 minutes)
 
 1. Log in as **Administrator**. Open the Overview, Intelligence, and Departments pages to show seeded trends.
 2. Open **New grievance** and enter a complaint (for example, an exposed live electrical wire). Click **Analyze grievance** to preview the mock category, urgency, department, and expected target.
@@ -116,7 +119,7 @@ Passwords are demonstration-only and the login system must **not** be exposed on
 5. Sign in as **Citizen**, submit another complaint, then track that ticket; demonstrate that other citizens' cases and internal notes are not visible.
 6. Return as Admin, search or filter by department, **Export CSV**, and optionally **Reset demo data** from Settings.
 
-## 6. Tests
+## 5. Tests
 
 ```powershell
 cd backend
@@ -127,7 +130,7 @@ Mac/Linux: `./.venv/bin/python -m pytest -q` from `backend`.
 
 API routes are also documented at `http://127.0.0.1:8000/docs`.
 
-## 7. Project map
+## 6. Project map
 
 ```text
 NagrikOS-Audited-v4/
@@ -165,7 +168,7 @@ NagrikOS-Audited-v4/
         └── styles.css
 ```
 
-## 8. Notes
+## 7. Notes
 
 - The application is meant for **local demonstration**, not public deployment or government use.
 - The first backend launch creates `backend/data/nagrikos.db` with 520 repeatable synthetic grievances across all 75 districts. Changes persist until you reset or delete that SQLite file.
