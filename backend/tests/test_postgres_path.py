@@ -122,11 +122,13 @@ def test_admin_bootstrap_env_secret_is_one_time(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv('DATABASE_URL', raising=False)
     monkeypatch.setenv('NAGRIKOS_MODE', 'public')
     monkeypatch.setenv('NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD', 'unique bootstrap phrase 123')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_EMAIL', 'admin@example.org')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_NAME', 'Admin')
     # The production-target guard is tested separately; this test exercises
     # the one-time account creation behavior against a disposable SQLite DB.
     monkeypatch.setattr(provision_admin, 'check_admin_target', lambda: None)
     monkeypatch.setattr(provision_admin, 'password_policy', lambda password: None)
-    monkeypatch.setattr(sys, 'argv', ['provision_admin.py', '--email', 'admin@example.org', '--name', 'Admin'])
+    monkeypatch.setattr(sys, 'argv', ['provision_admin.py'])
     provision_admin.main()
     with sqlite3.connect(tmp_path / 'bootstrap.db') as db:
         assert db.execute("SELECT count(*) FROM users WHERE role='admin' AND is_demo=0").fetchone()[0] == 1
@@ -134,3 +136,79 @@ def test_admin_bootstrap_env_secret_is_one_time(tmp_path, monkeypatch, capsys):
         provision_admin.main()
     output = capsys.readouterr()
     assert 'unique bootstrap phrase 123' not in output.out + output.err
+
+
+def test_actions_admin_bootstrap_fails_closed_without_password(monkeypatch):
+    import sys
+    from scripts import provision_admin
+
+    monkeypatch.setenv('NAGRIKOS_MODE', 'public')
+    monkeypatch.setenv('GITHUB_ACTIONS', 'true')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_EMAIL', 'admin@example.org')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_NAME', 'Admin')
+    monkeypatch.delenv('NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD', raising=False)
+    monkeypatch.setattr(provision_admin, 'check_admin_target', lambda: None)
+    monkeypatch.setattr(provision_admin, 'initialize', lambda: pytest.fail('database opened'))
+    monkeypatch.setattr(provision_admin.getpass, 'getpass', lambda *_: pytest.fail('interactive prompt opened'))
+    monkeypatch.setattr(sys, 'argv', ['provision_admin.py'])
+    with pytest.raises(SystemExit):
+        provision_admin.main()
+
+
+def test_postgres_admin_bootstrap_locks_before_duplicate_check(monkeypatch):
+    import contextlib
+    import sys
+    from scripts import provision_admin
+
+    statements = []
+
+    class Result:
+        def fetchone(self):
+            return None
+
+    class Connection:
+        def execute(self, sql, params=()):
+            statements.append(sql)
+            return Result()
+
+    @contextlib.contextmanager
+    def fake_connect():
+        yield Connection()
+
+    monkeypatch.setenv('NAGRIKOS_MODE', 'public')
+    monkeypatch.setenv('NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD', 'unique bootstrap phrase 123')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_EMAIL', 'admin@example.org')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_NAME', 'Admin')
+    monkeypatch.setattr(provision_admin, 'check_admin_target', lambda: None)
+    monkeypatch.setattr(provision_admin, 'password_policy', lambda password: None)
+    monkeypatch.setattr(provision_admin, 'initialize', lambda: None)
+    monkeypatch.setattr(provision_admin, 'connect', fake_connect)
+    monkeypatch.setattr(provision_admin.postgres, 'enabled', lambda: True)
+    monkeypatch.setattr(provision_admin, 'hash_password', lambda password: 'test-hash')
+    monkeypatch.setattr(sys, 'argv', ['provision_admin.py'])
+    provision_admin.main()
+    assert statements[0].startswith('SELECT pg_advisory_xact_lock(')
+    assert 'FROM users WHERE role=' in statements[1]
+    assert statements[-1].startswith('INSERT INTO users(')
+
+
+def test_admin_cli_failure_hides_connection_details():
+    import os
+    import subprocess
+    import sys
+    from scripts.check_production_target import PROJECT_ID, PRODUCTION_BRANCH_ID
+
+    marker = 'dummy_private_password_marker'
+    env = {**os.environ,
+           'NAGRIKOS_MODE': 'public',
+           'NAGRIKOS_ADMIN_TARGET': 'production',
+           'NEON_PRODUCTION_PROJECT_ID': PROJECT_ID,
+           'NEON_PRODUCTION_BRANCH_ID': PRODUCTION_BRANCH_ID,
+           'DATABASE_URL': f'postgresql://neondb_owner:{marker}@invalid.example/neondb?sslmode=require',
+           'GITHUB_ACTIONS': 'true'}
+    result = subprocess.run([sys.executable, 'scripts/provision_admin.py'],
+                            cwd=Path(__file__).resolve().parents[1],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert marker not in result.stdout + result.stderr
+    assert 'Administrator provisioning FAILED' in result.stderr

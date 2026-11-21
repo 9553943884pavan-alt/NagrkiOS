@@ -64,6 +64,8 @@ def check_admin_target(environ: dict[str, str] | None = None, *, require_direct:
         pooled = _url(env.get('DATABASE_URL', ''), 'DATABASE_URL')
         if pooled.hostname != PRODUCTION_DIRECT_HOST.replace('.', '-pooler.', 1):
             raise RuntimeError('Admin DATABASE_URL is not the approved pooled endpoint')
+        if pooled.path != '/neondb' or pooled.username != 'neondb_owner':
+            raise RuntimeError('Admin DATABASE_URL is not the approved production database and role')
         if require_direct:
             direct = _url(env.get('DIRECT_URL', ''), 'DIRECT_URL')
             if (direct.hostname != PRODUCTION_DIRECT_HOST or

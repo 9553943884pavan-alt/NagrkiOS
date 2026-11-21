@@ -2,6 +2,11 @@ name: Provision first administrator
 
 on:
   workflow_dispatch:
+    inputs:
+      approval:
+        description: 'Enter PROVISION-FIRST-ADMIN after the operator approves the production write'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,18 +16,31 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: neon-admin
+    timeout-minutes: 15
     concurrency:
       group: neon-production-admin
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Validate manual dispatch
+        shell: bash
+        env:
+          APPROVAL: ${{ inputs.approval }}
+        run: |
+          set -euo pipefail
+          if [ "$APPROVAL" != 'PROVISION-FIRST-ADMIN' ]; then
+            echo 'Explicit administrator provisioning approval phrase is required'; exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Provision first administrator only
         working-directory: backend
+        shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NAGRIKOS_MODE: public
@@ -33,7 +51,8 @@ jobs:
           BOOTSTRAP_ADMIN_EMAIL: ${{ secrets.BOOTSTRAP_ADMIN_EMAIL }}
           BOOTSTRAP_ADMIN_NAME: ${{ secrets.BOOTSTRAP_ADMIN_NAME }}
         run: |
+          set -euo pipefail
           if [ -z "$DATABASE_URL" ] || [ -z "$NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD" ] || [ -z "$BOOTSTRAP_ADMIN_EMAIL" ] || [ -z "$BOOTSTRAP_ADMIN_NAME" ]; then
-            echo 'Set all neon-admin environment secrets before running'; exit 1
+            echo 'Required neon-admin environment secret is missing'; exit 1
           fi
-          python scripts/provision_admin.py --email "$BOOTSTRAP_ADMIN_EMAIL" --name "$BOOTSTRAP_ADMIN_NAME"
+          python scripts/provision_admin.py

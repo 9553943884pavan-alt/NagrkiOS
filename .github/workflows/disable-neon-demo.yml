@@ -11,18 +11,22 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: neon-admin
+    timeout-minutes: 15
     concurrency:
       group: neon-production-admin
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Disable demo login material after validation
         working-directory: backend
+        shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
@@ -31,6 +35,7 @@ jobs:
           NEON_PRODUCTION_PROJECT_ID: winter-meadow-40329605
           NEON_PRODUCTION_BRANCH_ID: br-super-glitter-a769u0u1
         run: |
+          set -euo pipefail
           if [ -z "$DATABASE_URL" ] || [ -z "$DIRECT_URL" ]; then
             echo 'Set DATABASE_URL and DIRECT_URL in neon-admin environment secrets'; exit 1
           fi

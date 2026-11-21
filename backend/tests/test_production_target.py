@@ -41,7 +41,10 @@ def dummy_env():
 
 
 def admin_env():
-    return {**dummy_env(), 'NAGRIKOS_ADMIN_TARGET': 'production'}
+    env = dummy_env()
+    env['DIRECT_URL'] = env['DIRECT_URL'].replace('dummy_role', 'neondb_owner').replace('/dummy_db', '/neondb')
+    env['DATABASE_URL'] = env['DATABASE_URL'].replace('dummy_role', 'neondb_owner').replace('/dummy_db', '/neondb')
+    return {**env, 'NAGRIKOS_ADMIN_TARGET': 'production'}
 
 
 def test_admin_guard_is_offline_and_pins_both_production_endpoints():
@@ -62,6 +65,8 @@ def test_admin_guard_is_offline_and_pins_both_production_endpoints():
     ('DIRECT_URL', f'postgresql://dummy_role:dummy_password@{TESTING_DIRECT_HOST}/dummy_db?sslmode=require'),
     ('DIRECT_URL', f'postgresql://dummy_role:other_password@{PRODUCTION_DIRECT_HOST}/dummy_db?sslmode=require'),
     ('DATABASE_URL', f'postgresql://dummy_role:dummy_password@{PRODUCTION_DIRECT_HOST.replace(".", "-pooler.", 1)}/dummy_db?sslmode=disable'),
+    ('DATABASE_URL', f'postgresql://neondb_owner:dummy_password@{PRODUCTION_DIRECT_HOST.replace(".", "-pooler.", 1)}/wrong_db?sslmode=require'),
+    ('DATABASE_URL', f'postgresql://wrong_role:dummy_password@{PRODUCTION_DIRECT_HOST.replace(".", "-pooler.", 1)}/neondb?sslmode=require'),
 ])
 def test_admin_guard_rejects_testing_mixed_or_insecure_targets(name, value):
     env = admin_env()
@@ -95,6 +100,20 @@ def test_admin_workflows_are_manual_protected_and_target_pinned():
         assert 'NEON_PRODUCTION_PROJECT_ID: winter-meadow-40329605' in source
         assert 'NEON_PRODUCTION_BRANCH_ID: br-super-glitter-a769u0u1' in source
         assert 'permissions:\n  contents: read' in source
+
+
+def test_admin_bootstrap_workflow_requires_dispatch_phrase_and_keeps_secrets_out_of_args():
+    source = (BACKEND.parent / '.github/workflows/provision-admin.yml').read_text(encoding='utf-8')
+    assert 'PROVISION-FIRST-ADMIN' in source
+    assert 'timeout-minutes: 15' in source
+    assert 'persist-credentials: false' in source
+    assert 'python scripts/provision_admin.py\n' in source
+    assert 'python scripts/provision_admin.py --email' not in source
+    assert 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' in source
+    assert 'actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0' in source
+    for name in ('DATABASE_URL', 'BOOTSTRAP_ADMIN_EMAIL', 'BOOTSTRAP_ADMIN_NAME',
+                 'BOOTSTRAP_ADMIN_PASSWORD'):
+        assert f'secrets.{name}' in source
 
 
 def test_valid_production_pair_is_offline_only():
@@ -243,8 +262,10 @@ class FakeConnection:
     def __exit__(self, *_): return False
     def exec_driver_sql(self, statement):
         self.statements.append(statement)
-        if statement == 'SHOW server_version_num': return FakeResult(self.version)
-        if 'FROM pg_class' in statement: return FakeResult(self.tables)
+        if statement == 'SHOW server_version_num':
+            return FakeResult(self.version)
+        if 'FROM pg_class' in statement:
+            return FakeResult(self.tables)
         return FakeResult(None)
     def rollback(self): self.statements.append('ROLLBACK')
 
@@ -261,7 +282,6 @@ class FakeEngine:
     ('180007', 0, True), ('170012', 0, False), ('180007', 1, False),
 ])
 def test_read_only_empty_preflight_checks_version_and_occupancy(version, tables, passes):
-    from sqlalchemy import create_engine
     connection = FakeConnection(version, tables)
     engine = FakeEngine(connection)
     with patch('sqlalchemy.create_engine', return_value=engine):
