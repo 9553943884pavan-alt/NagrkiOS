@@ -1,4 +1,5 @@
-// Run with: playwright-cli run-code --filename=frontend/tests/new-viewport-smoke.js
+// Start Vite with `npm run dev -- --port 5174`, then run:
+// playwright-cli run-code --filename=frontend/tests/new-viewport-smoke.js
 // Uses synthetic API responses; it never submits a grievance.
 async page => {
   const json = value => ({status: 200, contentType: 'application/json', body: JSON.stringify(value)});
