@@ -140,6 +140,24 @@ def test_adapter_never_commits_application_transaction():
     assert (underlying.commits, underlying.rollbacks, underlying.closes) == (0, 0, 0)
 
 
+def test_direct_preflight_uses_unpooled_engine_not_application_pooler():
+    import sqlalchemy
+    from app import postgres
+
+    direct, pooled = FakeEngine(), FakeEngine()
+    env = dummy_env()
+    with patch.object(sqlalchemy, 'create_engine', return_value=direct) as create_direct, \
+         patch.object(postgres, 'engine_for', return_value=pooled) as create_pooled, \
+         patch.object(smoke, 'schema_and_counts', return_value={name: 0 for name in smoke.TABLES}), \
+         patch.object(smoke, 'temporary_commit_and_rollback'), \
+         patch.object(smoke, 'exercise_api'):
+        smoke.run_smoke(env)
+    assert create_direct.call_count == 1
+    assert env['DIRECT_URL'].split('@', 1)[1] in create_direct.call_args.args[0]
+    create_pooled.assert_called_once_with(env['DATABASE_URL'])
+    assert direct.disposed and pooled.disposed
+
+
 def test_savepoint_commit_and_failure_rollback():
     connection = FakeConnection()
     connect = smoke.rollback_only_connect(connection)

@@ -256,7 +256,16 @@ def run_smoke(environ=None, engine_factory=None) -> None:
     check_target(env)
     if engine_factory is None:
         from app.postgres import engine_for
-        engine_factory = engine_for
+        from sqlalchemy import create_engine, pool
+
+        def engine_factory(value):
+            if value == env['DATABASE_URL']:
+                return engine_for(value)
+            # The application's engine_for deliberately rejects direct Neon
+            # hosts. Read-only preflight and the TEMP-table check need direct.
+            return create_engine(value.replace('postgresql://', 'postgresql+psycopg://', 1),
+                                 connect_args={'connect_timeout': 5},
+                                 poolclass=pool.NullPool, pool_pre_ping=True)
     direct = engine_factory(env['DIRECT_URL'])
     try:
         pooled = engine_factory(env['DATABASE_URL'])
