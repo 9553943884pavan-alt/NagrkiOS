@@ -8,6 +8,11 @@ from sqlalchemy import create_engine, pool
 
 from app.models import metadata
 from scripts.check_testing_target import check_target
+from scripts.check_production_target import (
+    check_target as check_production_target,
+    check_backup as check_production_backup,
+    verify_neon_branches,
+)
 
 config = context.config
 target_metadata = metadata
@@ -17,7 +22,15 @@ def direct_url():
     # Protect direct Alembic invocations as well as the GitHub workflow.
     # An operator must update the pinned branch mapping after a verified
     # endpoint change before any migration can connect elsewhere.
-    check_target()
+    migration_target = os.environ.get('NAGRIKOS_MIGRATION_TARGET', 'testing')
+    if migration_target == 'testing':
+        check_target()
+    elif migration_target == 'production':
+        check_production_target()
+        check_production_backup()
+        verify_neon_branches()
+    else:
+        raise RuntimeError('Unknown Neon migration target')
     value = os.environ.get('DIRECT_URL', '').strip()
     parsed = urlsplit(value)
     if parsed.scheme not in {'postgresql', 'postgresql+psycopg'} or not parsed.hostname:

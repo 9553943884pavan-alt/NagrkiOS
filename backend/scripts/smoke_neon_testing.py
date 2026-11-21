@@ -141,9 +141,7 @@ def exercise_api(connection, marker: str) -> None:
         'NAGRIKOS_MODE': 'public', 'COOKIE_SECURE': 'true',
         'NAGRIKOS_TOTP_KEY': Fernet.generate_key().decode('ascii'),
         'NAGRIKOS_REQUIRE_POSTGRES': 'true', 'NAGRIKOS_REQUIRE_DURABLE_STORAGE': 'false',
-        # The committed app uses Brevo; the local mail update uses Mailjet.
-        # Both are test-only placeholders because send_mail is patched below.
-        'BREVO_API_KEY': 'smoke-only-key',
+        # Test-only placeholders; send_mail is patched below.
         'MAILJET_API_KEY': 'smoke-only-key', 'MAILJET_SECRET_KEY': 'smoke-only-secret',
         'MAIL_FROM': 'smoke@example.invalid', 'PUBLIC_BASE_URL': 'https://smoke.invalid',
         'CORS_ORIGINS': 'https://smoke.invalid',

@@ -1,0 +1,290 @@
+{
+  "candidate_source_category_by_script_or_language": {
+    "Animal Husbandry": {
+      "latin_script": 51
+    },
+    "Certificates": {
+      "latin_script": 4
+    },
+    "Community Infrastructure and Services": {
+      "latin_script": 10
+    },
+    "Crime and Safety": {
+      "latin_script": 10
+    },
+    "Electricity and Power Supply": {
+      "latin_script": 19
+    },
+    "Fire Safety": {
+      "latin_script": 1
+    },
+    "Garbage and Unsanitary Practices": {
+      "latin_script": 245
+    },
+    "Lakes": {
+      "latin_script": 2
+    },
+    "Mobility - Roads, Footpaths and Infrastructure": {
+      "latin_script": 340
+    },
+    "Others": {
+      "latin_script": 20
+    },
+    "Parks & Garden": {
+      "latin_script": 1
+    },
+    "Parks & Recreation": {
+      "latin_script": 3
+    },
+    "Pollution": {
+      "latin_script": 29
+    },
+    "Power supply": {
+      "latin_script": 1
+    },
+    "Public Toilets": {
+      "latin_script": 2
+    },
+    "Public Transport - BMTC": {
+      "latin_script": 4
+    },
+    "Public transport (BMTC and Metro)": {
+      "latin_script": 1
+    },
+    "Ration Card": {
+      "latin_script": 1
+    },
+    "Roads and Footpaths": {
+      "latin_script": 9
+    },
+    "Safety and Crime": {
+      "latin_script": 2
+    },
+    "Sanitation": {
+      "latin_script": 1
+    },
+    "Sewerage Systems": {
+      "latin_script": 24
+    },
+    "Solid Waste Management": {
+      "latin_script": 1
+    },
+    "Storm Water Drains": {
+      "latin_script": 7
+    },
+    "Street lighting": {
+      "latin_script": 48
+    },
+    "Streetlights": {
+      "latin_script": 34
+    },
+    "Traffic and Road Safety": {
+      "latin_script": 53
+    },
+    "Trees and Saplings": {
+      "latin_script": 6
+    },
+    "Water Supply": {
+      "latin_script": 2
+    },
+    "Water Supply and Services": {
+      "latin_script": 27
+    },
+    "Yellow Spot": {
+      "latin_script": 41
+    }
+  },
+  "genuine_category_by_language": {},
+  "independent_detection_labels": {},
+  "policy": "Synthetic labels are generated. Real source categories are counted as usable only after explicit human privacy approval; unreviewed narratives remain candidates. Script hints are not verified languages. Operational descriptors never count as complaint text.",
+  "real_narrative_records": 1000,
+  "real_operational_records": 1000,
+  "source_counts": {
+    "nandi_synthetic_phase2": 150,
+    "nyc_311_2024_bounded": 1000,
+    "opencity_ichangemycity_2019_2022": 1000
+  },
+  "source_language_distribution": {
+    "nandi_synthetic_phase2": {
+      "en": 50,
+      "hi": 50,
+      "hinglish": 50
+    },
+    "nyc_311_2024_bounded": {
+      "latin_script": 1000
+    },
+    "opencity_ichangemycity_2019_2022": {
+      "latin_script": 1000
+    }
+  },
+  "synthetic_category_by_language": {
+    "bank.atm_debit_card": {
+      "en": 2
+    },
+    "bank.credit_card": {
+      "hi": 1
+    },
+    "bank.digital_banking": {
+      "en": 1,
+      "hi": 1
+    },
+    "bank.fraud_unauthorised_txn": {
+      "en": 4,
+      "hi": 1,
+      "hinglish": 3
+    },
+    "bank.kyc_freeze": {
+      "en": 1
+    },
+    "bank.loan_advances": {
+      "hi": 2
+    },
+    "bank.misselling_parabanking": {
+      "en": 1
+    },
+    "bank.other": {
+      "hi": 2
+    },
+    "bank.pension_senior": {
+      "hi": 1
+    },
+    "bank.recovery_harassment": {
+      "en": 1,
+      "hi": 2,
+      "hinglish": 2
+    },
+    "bank.remittance_cheque": {
+      "en": 1
+    },
+    "bank.staff_behaviour": {
+      "en": 1
+    },
+    "con.durables_electronics": {
+      "hinglish": 2
+    },
+    "con.ecommerce": {
+      "hi": 2,
+      "hinglish": 1
+    },
+    "con.education_coaching": {
+      "hinglish": 1
+    },
+    "con.other": {
+      "en": 3
+    },
+    "con.travel_airlines": {
+      "hinglish": 1
+    },
+    "gov.aadhaar": {
+      "hinglish": 1
+    },
+    "gov.agri_pmkisan": {
+      "en": 3
+    },
+    "gov.cooperative": {
+      "hi": 2
+    },
+    "gov.corruption_misconduct": {
+      "en": 1,
+      "hinglish": 1
+    },
+    "gov.health_hospitals": {
+      "en": 2,
+      "hi": 2,
+      "hinglish": 1
+    },
+    "gov.housing_pmay": {
+      "hi": 2
+    },
+    "gov.income_tax_pan": {
+      "en": 2,
+      "hi": 1,
+      "hinglish": 2
+    },
+    "gov.lpg_fuel": {
+      "en": 3,
+      "hi": 2,
+      "hinglish": 3
+    },
+    "gov.passport": {
+      "en": 2,
+      "hinglish": 1
+    },
+    "gov.pf_epfo": {
+      "en": 1,
+      "hi": 2,
+      "hinglish": 2
+    },
+    "gov.postal": {
+      "hinglish": 1
+    },
+    "gov.railways": {
+      "en": 5,
+      "hi": 7,
+      "hinglish": 7
+    },
+    "gov.ration_pds": {
+      "en": 1,
+      "hi": 1,
+      "hinglish": 1
+    },
+    "gov.roads_transport": {
+      "hi": 1
+    },
+    "ins.coverage_policy_terms": {
+      "hinglish": 1
+    },
+    "ins.health_claim": {
+      "en": 1,
+      "hinglish": 2
+    },
+    "ins.misselling_ufbp": {
+      "en": 1,
+      "hi": 1,
+      "hinglish": 1
+    },
+    "ins.motor_claim": {
+      "hi": 1,
+      "hinglish": 1
+    },
+    "ins.policy_servicing": {
+      "en": 2,
+      "hi": 1
+    },
+    "ins.premium_refund": {
+      "hi": 1,
+      "hinglish": 1
+    },
+    "ins.property_crop_other_claim": {
+      "hi": 1
+    },
+    "ins.proposal_processing": {
+      "hinglish": 1
+    },
+    "ins.survival_maturity": {
+      "hi": 2,
+      "hinglish": 1
+    },
+    "ins.ulip": {
+      "hinglish": 1
+    },
+    "none.out_of_scope": {
+      "en": 10,
+      "hi": 10,
+      "hinglish": 10
+    },
+    "tel.broadband_internet": {
+      "en": 1
+    },
+    "tel.network_coverage": {
+      "hinglish": 1
+    },
+    "tel.other": {
+      "hi": 1
+    }
+  },
+  "synthetic_complaint_domain_records": 120,
+  "synthetic_domain_none_records": 30,
+  "synthetic_records": 150,
+  "usable_privacy_reviewed_real_narratives": 0
+}

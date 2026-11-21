@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import binascii
+import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -14,13 +16,14 @@ import urllib.request
 from urllib.parse import quote
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from .auth import hash_password, remove_cookies, require_admin, token_hash, verify_password
 from .db import connect
 
 router = APIRouter(prefix='/api/auth')
+logger = logging.getLogger(__name__)
 
 COMMON = {'password', 'password123', 'password1234', 'password12345', 'qwerty123456789',
           '123456789012345', '1234567890123456', 'letmein123456789', 'admin1234567890',
@@ -32,7 +35,9 @@ def mode() -> str:
 
 
 def mail_ready() -> bool:
-    return bool(os.getenv('BREVO_API_KEY', '').strip() and os.getenv('MAIL_FROM', '').strip())
+    return bool(os.getenv('MAILJET_API_KEY', '').strip() and
+                os.getenv('MAILJET_SECRET_KEY', '').strip() and
+                os.getenv('MAIL_FROM', '').strip())
 
 
 def validate_config() -> None:
@@ -53,7 +58,7 @@ def validate_config() -> None:
         except (ValueError, TypeError, binascii.Error):
             raise RuntimeError('NAGRIKOS_TOTP_KEY must be a valid Fernet key')
         if not mail_ready():
-            raise RuntimeError('Public mode requires BREVO_API_KEY and MAIL_FROM')
+            raise RuntimeError('Public mode requires MAILJET_API_KEY, MAILJET_SECRET_KEY and MAIL_FROM')
         try:
             canonical(os.environ['MAIL_FROM'])
         except HTTPException:
@@ -66,10 +71,11 @@ def validate_config() -> None:
                urlsplit(x).hostname in {'localhost','127.0.0.1'} or urlsplit(x).path or
                urlsplit(x).query or urlsplit(x).fragment or urlsplit(x).username for x in origins):
             raise RuntimeError('Public CORS origins must use HTTPS')
-    if os.getenv('BREVO_API_KEY', ''):
-        key = os.environ['BREVO_API_KEY']
-        if key != key.strip() or any(not 33 <= ord(c) <= 126 for c in key):
-            raise RuntimeError('BREVO_API_KEY must contain only printable non-space ASCII')
+    for name in ('MAILJET_API_KEY', 'MAILJET_SECRET_KEY'):
+        if os.getenv(name, ''):
+            value = os.environ[name]
+            if value != value.strip() or any(not 33 <= ord(c) <= 126 for c in value) or (name == 'MAILJET_API_KEY' and ':' in value):
+                raise RuntimeError(f'{name} must contain only printable non-space ASCII')
 
 
 def canonical(email: str) -> str:
@@ -119,30 +125,93 @@ def throttle(db, request: Request, purpose: str, email: str, limit: int = 5, win
     return limited
 
 
+class MailDeliveryUnavailable(HTTPException):
+    """Publicly generic failure with a bounded, internal provider classification."""
+
+    def __init__(self, reason: str):
+        super().__init__(503, 'Email delivery is unavailable. Try again later.')
+        self.reason = reason
+        logger.warning('Mailjet delivery unavailable: %s', reason)
+
+
+def _mailjet_failure_reason(status: int, document: object) -> str:
+    """Classify only documented codes/statuses; never retain provider text or tokens."""
+    errors = []
+    if isinstance(document, dict):
+        errors.append(document)
+        messages = document.get('Messages')
+        if isinstance(messages, list):
+            for message in messages[:1]:
+                if isinstance(message, dict) and isinstance(message.get('Errors'), list):
+                    errors.extend(error for error in message['Errors'][:10] if isinstance(error, dict))
+    codes = {error.get('ErrorCode') for error in errors if isinstance(error.get('ErrorCode'), str)}
+    if 'mj-0001' in codes:
+        return 'suspended_key'
+    if 'mj-0015' in codes:
+        return 'invalid_credentials'
+    if 'send-0008' in codes:
+        return 'unauthorized_sender'
+    if status in (200, 201):
+        status = next((error['StatusCode'] for error in errors
+                       if type(error.get('StatusCode')) is int and 400 <= error['StatusCode'] <= 599), status)
+    if status == 401:
+        return 'authentication_rejected'
+    if status == 403:
+        return 'permission_denied'
+    if status == 429:
+        return 'rate_limited'
+    if status >= 500:
+        return 'provider_unavailable'
+    return 'request_rejected'
+
+
+def _mailjet_document(raw: bytes) -> object:
+    try:
+        return json.loads(raw)
+    except (ValueError, UnicodeError):
+        return None
+
+
 def send_mail(db, recipient: str, subject: str, body: str) -> None:
     if not mail_ready():
-        raise HTTPException(503, 'Email delivery is unavailable. Try again later.')
-    payload = json.dumps({'sender': {'email': os.environ['MAIL_FROM']},
-                          'to': [{'email': recipient}], 'subject': subject,
-                          'textContent': body}).encode('utf-8')
-    request = urllib.request.Request('https://api.brevo.com/v3/smtp/email', data=payload,
-                                     headers={'api-key': os.environ['BREVO_API_KEY'],
-                                              'accept': 'application/json',
-                                              'Content-Type': 'application/json'}, method='POST')
+        raise MailDeliveryUnavailable('not_configured')
+    payload = json.dumps({'Messages': [{'From': {'Email': os.environ['MAIL_FROM']},
+                                        'To': [{'Email': recipient}],
+                                        'Subject': subject, 'TextPart': body}]}).encode('utf-8')
     try:
+        credentials = (os.environ['MAILJET_API_KEY'] + ':' + os.environ['MAILJET_SECRET_KEY']).encode('ascii')
+        authorization = 'Basic ' + base64.b64encode(credentials).decode('ascii')
+        request = urllib.request.Request('https://api.mailjet.com/v3.1/send', data=payload,
+                                         headers={'Authorization': authorization,
+                                                  'accept': 'application/json',
+                                                  'Content-Type': 'application/json'}, method='POST')
         with urllib.request.urlopen(request, timeout=10, context=ssl.create_default_context()) as result:
-            if result.status != 201:
-                raise ValueError('Email API rejected the request')
+            if result.status not in (200, 201):
+                raise MailDeliveryUnavailable(_mailjet_failure_reason(result.status, None))
             raw = result.read(16_385)
             if len(raw) > 16_384:
-                raise ValueError('Email API response too large')
-            accepted = json.loads(raw)
-            message_id = accepted.get('messageId') if isinstance(accepted, dict) else None
-            if (not isinstance(message_id, str) or len(message_id) > 512 or
-                    not re.fullmatch(r'<[^<>\s@]+@[^<>\s@]+>', message_id)):
-                raise ValueError('Email API did not confirm acceptance')
-    except (OSError, ValueError, urllib.error.URLError) as exc:
-        raise HTTPException(503, 'Email delivery is unavailable. Try again later.') from exc
+                raise MailDeliveryUnavailable('invalid_response')
+            accepted = _mailjet_document(raw)
+            messages = accepted.get('Messages') if isinstance(accepted, dict) else None
+            message = messages[0] if isinstance(messages, list) and len(messages) == 1 else None
+            recipients = message.get('To') if isinstance(message, dict) else None
+            delivered_to = recipients[0] if isinstance(recipients, list) and len(recipients) == 1 else None
+            if (not isinstance(message, dict) or message.get('Status') != 'success' or message.get('Errors') or
+                    not isinstance(delivered_to, dict) or
+                    str(delivered_to.get('Email', '')).casefold() != recipient.casefold() or
+                    type(delivered_to.get('MessageID')) is not int or delivered_to['MessageID'] <= 0):
+                reason = (_mailjet_failure_reason(result.status, accepted) if
+                          isinstance(message, dict) and message.get('Errors') else 'invalid_response')
+                raise MailDeliveryUnavailable(reason)
+    except urllib.error.HTTPError as exc:
+        try:
+            raw = exc.read(16_385)
+        except OSError:
+            raw = b''
+        document = _mailjet_document(raw) if len(raw) <= 16_384 else None
+        raise MailDeliveryUnavailable(_mailjet_failure_reason(exc.code, document)) from None
+    except (OSError, ValueError, UnicodeError, urllib.error.URLError):
+        raise MailDeliveryUnavailable('transport_failure') from None
 
 
 def issue_token(db, user_id: int, purpose: str, ttl: int = 1800) -> str:
@@ -261,15 +330,9 @@ def verify_email(body: VerifyEmailBody, request: Request):
     return {'message': 'Email verified. You can sign in.'}
 
 
-@router.post('/forgot-password', status_code=202)
-def forgot_password(body: EmailBody, request: Request):
-    if not mail_ready():
-        raise HTTPException(503, 'Recovery is unavailable because email delivery is not configured')
-    email = canonical(body.email)
-    with connect() as db:
-        limited=throttle(db, request, 'forgot', email)
-        db.commit()
-        if not limited:
+def _deliver_password_reset(email: str) -> None:
+    try:
+        with connect() as db:
             row = db.execute('SELECT id FROM users WHERE email_canonical=? AND email_verified_at IS NOT NULL '
                              'AND (?="demo" OR is_demo=0)', (email,mode())).fetchone()
             if row:
@@ -277,7 +340,22 @@ def forgot_password(body: EmailBody, request: Request):
                 link = os.getenv('PUBLIC_BASE_URL', 'http://127.0.0.1:8000').rstrip('/') + '/#reset=' + quote(token)
                 send_mail(db,email,'Reset your NagrikOS password',
                           'Open this link within 30 minutes to reset your password:\n' + link)
-    return {'message': 'If an account exists, a password reset link has been sent.'}
+    except MailDeliveryUnavailable:
+        # The transaction rolls back after the response; no reset token is issued.
+        pass
+
+
+@router.post('/forgot-password', status_code=202)
+def forgot_password(body: EmailBody, request: Request, tasks: BackgroundTasks):
+    if not mail_ready():
+        raise HTTPException(503, 'Recovery is unavailable because email delivery is not configured')
+    email = canonical(body.email)
+    with connect() as db:
+        limited = throttle(db, request, 'forgot', email)
+    if not limited:
+        # Lookup and delivery happen after the response for every allowed address.
+        tasks.add_task(_deliver_password_reset, email)
+    return {'message': 'If an account exists, check your email for a password reset link.'}
 
 
 @router.post('/reset-password')

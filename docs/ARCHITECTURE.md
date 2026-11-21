@@ -26,10 +26,11 @@ flowchart TB
     PG[(Neon PostgreSQL<br/>pooled application URL)]
     Direct["Direct Neon URL<br/>Alembic and verified import"]
     Photos["Private photo files<br/>backend/uploads"]
+    Objects["Private Neon Object Storage<br/>Singapore production branch"]
     MFAKey["TOTP encryption key<br/>environment or local key file"]
   end
 
-  Brevo["Brevo HTTPS Transactional Email API<br/>verified sender"]
+  Mailjet["Mailjet HTTPS Send API v3.1<br/>validated active sender"]
   PasswordCheck["Pwned Passwords range API<br/>public password checks"]
 
   React --> Vite --> Guard
@@ -41,15 +42,16 @@ flowchart TB
   Cases --> DB
   Cases --> PG
   Cases --> Photos
+  Cases --> Objects
   Account --> DB
   Account --> PG
   Direct --> PG
   Account --> MFAKey
-  Account --> Brevo
+  Account --> Mailjet
   Account --> PasswordCheck
 ```
 
-The Vite proxy is for local React development. In the planned hosted layout, Vercel serves React and rewrites `/api` to Render so the browser sees one HTTPS origin; [the deployment guide](RENDER_VERCEL_DEPLOYMENT.md) gives the exact settings. The no-install UI is served at `/` with assets under `/lite/` on FastAPI. SQLite remains the local/demo backend; PostgreSQL is selected by `DATABASE_URL` in public mode. PostgreSQL startup checks the Alembic revision and never seeds demo data. All runtime account email uses Brevo HTTPS when `BREVO_API_KEY` and `MAIL_FROM` are configured; tests stub that request. Photo bytes remain in local private storage and are not durable on Render Free.
+The Vite proxy is for local React development. In the planned hosted layout, Vercel serves React and rewrites `/api` to Render so the browser sees one HTTPS origin; [the deployment guide](RENDER_VERCEL_DEPLOYMENT.md) gives the exact settings. The no-install UI is served at `/` with assets under `/lite/` on FastAPI. SQLite remains the local/demo backend; PostgreSQL is selected by `DATABASE_URL` in public mode. PostgreSQL startup checks the Alembic revision and never seeds demo data. The Sydney production branch has been migrated to `20261114_01`; no startup migration runs. Runtime account email uses Mailjet HTTPS when `MAILJET_API_KEY`, `MAILJET_SECRET_KEY`, and `MAIL_FROM` are configured; one authorized message with updated credentials reached the owner's Gmail Spam folder. Photo bytes use local private files in demo mode. A configured private S3-compatible bucket uses the existing random `attachments.filename` as its object key and keeps ownership metadata in the relational table. Public uploads fail closed without durable storage, and Render startup requires the storage settings. Sydney Neon Object Storage is unavailable, so a separate Singapore Neon project now hosts the private production bucket; read-only production access passed, while production object writes remain untested.
 
 ## Trust and account flow
 
@@ -84,11 +86,12 @@ The backend applies citizen ownership and officer department filters in SQL quer
 | `users`, `sessions`, `login_attempts` | Verified identities and roles, password and encrypted MFA state, revocable sessions, throttling |
 | `account_tokens`, `auth_challenges`, `recovery_codes`, `staff_invitations` | Hashed verification/reset tokens, bounded MFA challenges, hashed one-time codes, authorized staff provisioning |
 | `complaints`, `history`, `notes`, `attachments` | Grievance records, activity, follow-ups, and photo ownership metadata |
-| `backend/uploads` | Private photo bytes; access goes through FastAPI ownership and case-scope checks |
+| `backend/uploads` | Local demo and read-only legacy photo bytes; access goes through FastAPI ownership and case-scope checks |
+| Private S3-compatible bucket | Optional server-side photo bytes, keyed by `attachments.filename`; backend streams authorized responses, never exposes bucket URLs |
 | `mail_outbox` | Retained legacy table for data preservation; no runtime writer or reader |
 | `backend/app/ai.py` | Deterministic heuristic outputs for classification, urgency, ETA, and illustrative image hints; no production ML model |
 
-SQLite migrations in [db.py](../backend/app/db.py) remain additive. PostgreSQL schema changes use [Alembic](../backend/migrations/versions/20261114_01_initial.py) over `DIRECT_URL`; the FastAPI app uses a small SQLAlchemy/psycopg pool over `DATABASE_URL`. [migrate_sqlite_to_postgres.py](../backend/scripts/migrate_sqlite_to_postgres.py) snapshots SQLite and verifies every imported row in a transaction. [NEON_POSTGRESQL.md](NEON_POSTGRESQL.md) describes setup, validation, and rollback. Cloud object storage is separate work.
+SQLite migrations in [db.py](../backend/app/db.py) remain additive. PostgreSQL schema changes use [Alembic](../backend/migrations/versions/20261114_01_initial.py) over `DIRECT_URL`; the FastAPI app uses a small SQLAlchemy/psycopg pool over `DATABASE_URL`. [migrate_sqlite_to_postgres.py](../backend/scripts/migrate_sqlite_to_postgres.py) snapshots SQLite and verifies every imported row in a transaction. [NEON_POSTGRESQL.md](NEON_POSTGRESQL.md) describes setup, validation, and rollback. The conditional private storage adapter is described in [OBJECT_STORAGE_INTEGRATION.md](OBJECT_STORAGE_INTEGRATION.md); live branch and bucket verification remains pending.
 
 ## API surface
 
@@ -114,7 +117,7 @@ SQLite migrations in [db.py](../backend/app/db.py) remain additive. PostgreSQL s
 | | Local demo | Public configuration |
 | --- | --- | --- |
 | Accounts | Seeds synthetic identities only for an empty database | No seeded accounts or demo credential exposure |
-| Email | Brevo HTTPS when configured; otherwise signup/recovery unavailable | Brevo HTTPS required |
+| Email | Mailjet HTTPS when configured; otherwise signup/recovery unavailable | Mailjet HTTPS required |
 | Password screening | Local common-password blocklist | Blocklist plus breached-password range check |
 | Cookies and transport | Local HTTP development settings | Secure cookies, HTTPS public URL, explicit origins, persistent TOTP key |
 | API documentation | Local development access | Disabled |

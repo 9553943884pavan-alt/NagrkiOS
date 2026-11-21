@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.account import canonical, password_policy  # noqa: E402
 from app.auth import hash_password  # noqa: E402
 from app.db import connect, initialize  # noqa: E402
+from scripts.check_production_target import check_admin_target  # noqa: E402
 
 
 def main():
@@ -21,6 +22,7 @@ def main():
     args=parser.parse_args()
     if os.getenv('NAGRIKOS_MODE') != 'public':
         parser.error('Set NAGRIKOS_MODE=public before provisioning')
+    check_admin_target()
     name=args.name.strip()
     if not 2<=len(name)<=100:
         parser.error('Name must be 2 to 100 characters')

@@ -14,6 +14,7 @@ from sqlalchemy.pool import NullPool
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.models import (account_tokens, auth_challenges, recovery_codes, sessions,
                         users)  # noqa: E402
+from scripts.check_production_target import check_admin_target  # noqa: E402
 from scripts.migrate_sqlite_to_postgres import urls  # noqa: E402
 
 DISABLED_HASH = '!disabled-demo-account'
@@ -36,6 +37,7 @@ def disable(connection) -> int:
 def main():
     if os.getenv('NAGRIKOS_MODE') != 'public':
         raise RuntimeError('Demo credential cleanup requires public mode')
+    check_admin_target(require_direct=True)
     direct, sslmode = urls()
     engine = create_engine(direct, connect_args={'sslmode': sslmode}, poolclass=NullPool)
     try:

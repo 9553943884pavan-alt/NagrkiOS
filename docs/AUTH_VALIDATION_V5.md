@@ -1,6 +1,6 @@
 # Authentication upgrade validation — 14 November 2026
 
-This is an archived record of the original authentication upgrade. Its former email transport and development mailbox descriptions are historical. Current runtime email delivery uses Brevo HTTPS only; see [BREVO_DEPLOYMENT.md](BREVO_DEPLOYMENT.md).
+This is an archived record of the original authentication upgrade. Its former email transport and development mailbox descriptions are historical. Current runtime email delivery uses Mailjet HTTPS only; see [MAILJET_DEPLOYMENT.md](MAILJET_DEPLOYMENT.md).
 
 ## Root causes and changes
 

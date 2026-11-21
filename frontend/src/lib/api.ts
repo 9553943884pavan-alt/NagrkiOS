@@ -39,5 +39,5 @@ export async function fetchBlob(path:string){
 }
 export async function downloadReport(){
   const blob=await fetchBlob('/api/export/complaints.csv');
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='nagrikos_demo_cases.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='nagrikos_cases.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }

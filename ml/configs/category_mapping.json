@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "status": "research_proposal_only",
+  "applies_to": "Uttar Pradesh; official desk and jurisdiction must be confirmed per case",
+  "source_of_categories": "backend/app/data.py CATEGORIES, inspected 2026-11-20",
+  "routing_approved": false,
+  "mappings": [
+    {
+      "category": "Roads & Infrastructure",
+      "app_demo_department": "Public Works Department",
+      "candidate_authorities": ["Public Works Department", "urban local body", "rural/local authority"],
+      "ambiguity": "Road ownership and road type determine the responsible agency; a streetlight pole may involve an electricity distributor or municipality.",
+      "evidence": ["https://msme1connect.up.gov.in/department-directory", "https://jjm.up.gov.in/Content/ngdashboard/pdf/shahjhapur/DGP_-_Shahjahanpur-Final_Draft_20230718.pdf"]
+    },
+    {
+      "category": "Water Supply",
+      "app_demo_department": "Water Supply & Sanitation",
+      "candidate_authorities": ["Jal Nigam", "Jal Shakti / Drinking Water and Sanitation", "urban local body"],
+      "ambiguity": "Urban versus rural service, asset ownership, and whether the issue is drinking water or wastewater are required.",
+      "evidence": ["https://jjm.up.gov.in/home/About", "https://jjm.up.gov.in/Content/ngdashboard/pdf/shahjhapur/DGP_-_Shahjahanpur-Final_Draft_20230718.pdf"]
+    },
+    {
+      "category": "Electricity",
+      "app_demo_department": "Power Distribution",
+      "candidate_authorities": ["UPPCL area distribution company", "transmission licensee where applicable"],
+      "ambiguity": "Distribution company and service area are required; generation/transmission faults may fall outside distribution.",
+      "evidence": ["https://consumer.uppcl.org/wss/other-consumer-service", "https://uppcl.org/site/writereaddata/siteContent/202511201244350575ESC%202005%20upto%203rd%20amendment%20ENG.pdf"]
+    },
+    {
+      "category": "Sanitation & Waste",
+      "app_demo_department": "Municipal Services",
+      "candidate_authorities": ["urban local body", "rural/local authority", "sewerage operator"],
+      "ambiguity": "Waste collection, drain maintenance, and sewerage are different services; rural/urban location matters.",
+      "evidence": ["https://invest.up.gov.in/uttar-pradesh-state-solid-waste-management-policy/"]
+    },
+    {
+      "category": "Healthcare",
+      "app_demo_department": "Health & Family Welfare",
+      "candidate_authorities": ["Medical Health & Family Welfare Department", "hospital operator"],
+      "ambiguity": "Facility ownership and nature of complaint matter; emergencies require emergency services, not automated routing.",
+      "evidence": ["https://dgmh.up.gov.in/en/about_us"]
+    },
+    {
+      "category": "Education",
+      "app_demo_department": "Basic Education",
+      "candidate_authorities": ["Basic Education", "Secondary Education", "Higher Education", "school operator"],
+      "ambiguity": "Education level and institution operator must be known before assignment.",
+      "evidence": ["https://information.up.gov.in/admin/UploadDocument/OtherPress/compressed_241020250301228%20Years%20full%20english%20CTB%20for%20Govt%20%281%29.pdf"]
+    },
+    {
+      "category": "Women & Child Services",
+      "app_demo_department": "Women & Child Development",
+      "candidate_authorities": ["Child Development Services & Nutrition", "Women Welfare", "Police for crimes or immediate danger"],
+      "ambiguity": "Nutrition/anganwadi, welfare, and criminal safety issues have distinct responsible authorities.",
+      "evidence": ["https://www.information.up.gov.in/admin/UploadDocument/CmPress/compressed_31032026011207PN-CM-Baal%20Vikas%20Seva%20evam%20Pushtahaar%20Department%20Programme-30%20March%2C%202026.pdf", "https://uppolice.gov.in/article/en/contact-us"]
+    },
+    {
+      "category": "Land & Revenue",
+      "app_demo_department": "Revenue & Land",
+      "candidate_authorities": ["Board of Revenue / district revenue office", "registration authority"],
+      "ambiguity": "Record correction, mutation, and registration are separate workflows; legal disputes need human triage.",
+      "evidence": ["https://upbhulekh.gov.in/"]
+    },
+    {
+      "category": "Public Safety",
+      "app_demo_department": "Police & Public Safety",
+      "candidate_authorities": ["Uttar Pradesh Police", "fire service", "other emergency responder"],
+      "ambiguity": "Emergency, crime, traffic, and fire have distinct channels; no model should replace emergency response.",
+      "evidence": ["https://uppolice.gov.in/article/en/contact-us"]
+    },
+    {
+      "category": "Social Benefits",
+      "app_demo_department": "Social Welfare",
+      "candidate_authorities": ["Social Welfare", "Food, Civil Supplies and Consumer Affairs", "scheme-specific office"],
+      "ambiguity": "Ration is a food/civil supplies issue; pensions and disability services may have different scheme owners.",
+      "evidence": ["https://smartpds.up.gov.in/", "https://uplc.up.gov.in/policy/Department-of-IT-and-Electronics-2025.pdf"]
+    },
+    {
+      "category": "Other",
+      "app_demo_department": "General Administration",
+      "candidate_authorities": [],
+      "ambiguity": "Insufficient evidence for any assignment; manual triage required.",
+      "evidence": []
+    }
+  ]
+}

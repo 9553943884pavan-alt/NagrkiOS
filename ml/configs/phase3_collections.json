@@ -1,0 +1,20 @@
+[
+  {
+    "source_id": "nyc_311_2024_bounded",
+    "kind": "real_operational",
+    "processed": "ml/data/processed/nyc_311_2024_bounded.jsonl",
+    "split": "ml/data/evaluation/nyc_311_2024_bounded.split.json"
+  },
+  {
+    "source_id": "nandi_synthetic_phase2",
+    "kind": "synthetic",
+    "processed": "ml/data/processed/nandi_synthetic_phase2.jsonl",
+    "split": "ml/data/evaluation/nandi_synthetic_phase2.split.json"
+  },
+  {
+    "source_id": "opencity_ichangemycity_2019_2022",
+    "kind": "real_narrative",
+    "processed": "ml/data/processed/opencity_ichangemycity_2019_2022_phase3.jsonl",
+    "split": "ml/data/evaluation/opencity_ichangemycity_2019_2022_phase3.split.json"
+  }
+]

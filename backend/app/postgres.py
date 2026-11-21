@@ -13,6 +13,8 @@ def _url(value: str) -> str:
     parsed = urlsplit(value)
     if parsed.scheme not in {'postgresql', 'postgresql+psycopg'} or not parsed.hostname:
         raise RuntimeError('DATABASE_URL must be a PostgreSQL connection URL')
+    if parsed.hostname.endswith('.neon.tech') and '-pooler.' not in parsed.hostname:
+        raise RuntimeError('Neon DATABASE_URL must use the pooled endpoint')
     sslmode = parse_qs(parsed.query).get('sslmode', ['require'])[-1]
     if sslmode not in {'require', 'verify-ca', 'verify-full'}:
         raise RuntimeError('DATABASE_URL must require TLS')
@@ -22,7 +24,7 @@ def _url(value: str) -> str:
 @lru_cache(maxsize=4)
 def engine_for(value: str):
     sslmode = parse_qs(urlsplit(value).query).get('sslmode', ['require'])[-1]
-    return create_engine(_url(value), connect_args={'sslmode': sslmode},
+    return create_engine(_url(value), connect_args={'sslmode': sslmode, 'connect_timeout': 5},
                          pool_size=5, max_overflow=5, pool_timeout=20,
                          pool_pre_ping=True, pool_recycle=1800)
 

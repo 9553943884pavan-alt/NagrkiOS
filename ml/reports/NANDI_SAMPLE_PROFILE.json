@@ -1,0 +1,92 @@
+{
+  "category_distribution": {
+    "bank.atm_debit_card": 2,
+    "bank.credit_card": 1,
+    "bank.digital_banking": 2,
+    "bank.fraud_unauthorised_txn": 8,
+    "bank.kyc_freeze": 1,
+    "bank.loan_advances": 2,
+    "bank.misselling_parabanking": 1,
+    "bank.other": 2,
+    "bank.pension_senior": 1,
+    "bank.recovery_harassment": 5,
+    "bank.remittance_cheque": 1,
+    "bank.staff_behaviour": 1,
+    "con.durables_electronics": 2,
+    "con.ecommerce": 3,
+    "con.education_coaching": 1,
+    "con.other": 3,
+    "con.travel_airlines": 1,
+    "gov.aadhaar": 1,
+    "gov.agri_pmkisan": 3,
+    "gov.cooperative": 2,
+    "gov.corruption_misconduct": 2,
+    "gov.health_hospitals": 5,
+    "gov.housing_pmay": 2,
+    "gov.income_tax_pan": 5,
+    "gov.lpg_fuel": 8,
+    "gov.passport": 3,
+    "gov.pf_epfo": 5,
+    "gov.postal": 1,
+    "gov.railways": 19,
+    "gov.ration_pds": 3,
+    "gov.roads_transport": 1,
+    "ins.coverage_policy_terms": 1,
+    "ins.health_claim": 3,
+    "ins.misselling_ufbp": 3,
+    "ins.motor_claim": 2,
+    "ins.policy_servicing": 3,
+    "ins.premium_refund": 2,
+    "ins.property_crop_other_claim": 1,
+    "ins.proposal_processing": 1,
+    "ins.survival_maturity": 3,
+    "ins.ulip": 1,
+    "none.out_of_scope": 30,
+    "tel.broadband_internet": 1,
+    "tel.network_coverage": 1,
+    "tel.other": 1
+  },
+  "distinct_texts": 150,
+  "exact_duplicate_rows": 0,
+  "exact_text_with_conflicting_category_groups": 0,
+  "language_hints": {
+    "en": 50,
+    "hi": 50,
+    "hinglish": 50
+  },
+  "median_observed_closure_hours": null,
+  "missing_by_field": {
+    "closed_at": 150,
+    "created_at": 150,
+    "department": 150,
+    "location": 150,
+    "status": 150
+  },
+  "negative_or_malformed_closure_dates": 0,
+  "notes": [
+    "These aggregate metrics disclose no complaint text.",
+    "Language fields may be source-provided or script-inferred; neither is independently verified here.",
+    "Observed closure intervals require censoring and case-definition review before ETA research.",
+    "Synthetic narratives and generated labels are not independent real-world ground truth."
+  ],
+  "privacy_review_required_count": 150,
+  "records": 150,
+  "related_groups": 150,
+  "related_rows_beyond_group_representatives": 0,
+  "source_ids": [
+    "nandi_synthetic_phase2"
+  ],
+  "split_counts": {
+    "test": 25,
+    "train": 109,
+    "validation": 16
+  },
+  "status_distribution": {
+    "unknown": 150
+  },
+  "subcategories_under_multiple_categories": 0,
+  "text_kinds": {
+    "synthetic_narrative": 150
+  },
+  "valid_closure_pairs": 0
+}

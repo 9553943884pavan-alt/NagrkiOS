@@ -1,0 +1,190 @@
+{
+  "genuine_category_by_language": {},
+  "independent_detection_labels": {},
+  "policy": "Synthetic labels are generated; only real narrative records with source-provided or human-reviewed labels count as genuine category examples. Operational descriptors never count as complaint text.",
+  "real_narrative_records": 0,
+  "real_operational_records": 1000,
+  "source_counts": {
+    "nandi_synthetic_phase2": 150,
+    "nyc_311_2024_bounded": 1000
+  },
+  "source_language_distribution": {
+    "nandi_synthetic_phase2": {
+      "en": 50,
+      "hi": 50,
+      "hinglish": 50
+    },
+    "nyc_311_2024_bounded": {
+      "latin_script": 1000
+    }
+  },
+  "synthetic_category_by_language": {
+    "bank.atm_debit_card": {
+      "en": 2
+    },
+    "bank.credit_card": {
+      "hi": 1
+    },
+    "bank.digital_banking": {
+      "en": 1,
+      "hi": 1
+    },
+    "bank.fraud_unauthorised_txn": {
+      "en": 4,
+      "hi": 1,
+      "hinglish": 3
+    },
+    "bank.kyc_freeze": {
+      "en": 1
+    },
+    "bank.loan_advances": {
+      "hi": 2
+    },
+    "bank.misselling_parabanking": {
+      "en": 1
+    },
+    "bank.other": {
+      "hi": 2
+    },
+    "bank.pension_senior": {
+      "hi": 1
+    },
+    "bank.recovery_harassment": {
+      "en": 1,
+      "hi": 2,
+      "hinglish": 2
+    },
+    "bank.remittance_cheque": {
+      "en": 1
+    },
+    "bank.staff_behaviour": {
+      "en": 1
+    },
+    "con.durables_electronics": {
+      "hinglish": 2
+    },
+    "con.ecommerce": {
+      "hi": 2,
+      "hinglish": 1
+    },
+    "con.education_coaching": {
+      "hinglish": 1
+    },
+    "con.other": {
+      "en": 3
+    },
+    "con.travel_airlines": {
+      "hinglish": 1
+    },
+    "gov.aadhaar": {
+      "hinglish": 1
+    },
+    "gov.agri_pmkisan": {
+      "en": 3
+    },
+    "gov.cooperative": {
+      "hi": 2
+    },
+    "gov.corruption_misconduct": {
+      "en": 1,
+      "hinglish": 1
+    },
+    "gov.health_hospitals": {
+      "en": 2,
+      "hi": 2,
+      "hinglish": 1
+    },
+    "gov.housing_pmay": {
+      "hi": 2
+    },
+    "gov.income_tax_pan": {
+      "en": 2,
+      "hi": 1,
+      "hinglish": 2
+    },
+    "gov.lpg_fuel": {
+      "en": 3,
+      "hi": 2,
+      "hinglish": 3
+    },
+    "gov.passport": {
+      "en": 2,
+      "hinglish": 1
+    },
+    "gov.pf_epfo": {
+      "en": 1,
+      "hi": 2,
+      "hinglish": 2
+    },
+    "gov.postal": {
+      "hinglish": 1
+    },
+    "gov.railways": {
+      "en": 5,
+      "hi": 7,
+      "hinglish": 7
+    },
+    "gov.ration_pds": {
+      "en": 1,
+      "hi": 1,
+      "hinglish": 1
+    },
+    "gov.roads_transport": {
+      "hi": 1
+    },
+    "ins.coverage_policy_terms": {
+      "hinglish": 1
+    },
+    "ins.health_claim": {
+      "en": 1,
+      "hinglish": 2
+    },
+    "ins.misselling_ufbp": {
+      "en": 1,
+      "hi": 1,
+      "hinglish": 1
+    },
+    "ins.motor_claim": {
+      "hi": 1,
+      "hinglish": 1
+    },
+    "ins.policy_servicing": {
+      "en": 2,
+      "hi": 1
+    },
+    "ins.premium_refund": {
+      "hi": 1,
+      "hinglish": 1
+    },
+    "ins.property_crop_other_claim": {
+      "hi": 1
+    },
+    "ins.proposal_processing": {
+      "hinglish": 1
+    },
+    "ins.survival_maturity": {
+      "hi": 2,
+      "hinglish": 1
+    },
+    "ins.ulip": {
+      "hinglish": 1
+    },
+    "none.out_of_scope": {
+      "en": 10,
+      "hi": 10,
+      "hinglish": 10
+    },
+    "tel.broadband_internet": {
+      "en": 1
+    },
+    "tel.network_coverage": {
+      "hinglish": 1
+    },
+    "tel.other": {
+      "hi": 1
+    }
+  },
+  "synthetic_complaint_domain_records": 120,
+  "synthetic_domain_none_records": 30,
+  "synthetic_records": 150
+}

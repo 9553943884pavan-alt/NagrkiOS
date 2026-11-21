@@ -21,6 +21,7 @@ from .data import CATEGORIES, DEPARTMENTS, DISTRICTS
 from .db import connect, initialize, iso, reset_demo
 from .postgres import enabled as postgres_enabled
 from .account import router as account_router, mode, validate_config, password_policy
+from . import object_storage
 
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', str(Path(__file__).resolve().parent.parent / 'uploads')))
 VALID_STATUSES = {'new','in_progress','escalated','resolved'}
@@ -29,6 +30,9 @@ VALID_PRIORITIES = {'low','medium','high','critical'}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_config()
+    object_storage.validate_config()
+    if mode() == 'public' and os.getenv('NAGRIKOS_REQUIRE_DURABLE_STORAGE', '').lower() == 'true' and not object_storage.configured():
+        raise RuntimeError('Public deployment requires private durable object storage')
     initialize()
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     if os.name == 'posix': UPLOAD_DIR.chmod(0o700)
@@ -407,6 +411,8 @@ def preview(body: AnalyzeBody, user: dict = Depends(current_user)):
 async def upload_attachment(file: UploadFile = File(...), user: dict = Depends(current_user)):
     if user['role']=='officer':
         raise HTTPException(403, 'Only citizens and administrators can attach photos to a new complaint')
+    if mode() == 'public' and not object_storage.configured():
+        raise HTTPException(503, 'Photo uploads are unavailable until durable storage is configured')
     name = (file.filename or 'photo').split('/')[-1].split('\\')[-1][:150]
     ext = Path(name).suffix.lower()
     if ext not in {'.png','.jpg','.jpeg','.webp'}:
@@ -446,19 +452,39 @@ async def upload_attachment(file: UploadFile = File(...), user: dict = Depends(c
     except (OSError, ValueError, SyntaxError):
         raise HTTPException(400,'Could not safely process image')
     filename = f'{secrets.token_hex(12)}{ext}'
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    if os.name == 'posix': UPLOAD_DIR.chmod(0o700)
+    cloud = object_storage.configured()
     photo_path = UPLOAD_DIR / filename
-    with open(photo_path, 'xb') as output:
-        output.write(data)
-    if os.name == 'posix':
-        photo_path.chmod(0o600)
+    if cloud:
+        try:
+            object_storage.put(filename, data, {'png':'image/png','jpg':'image/jpeg','jpeg':'image/jpeg','webp':'image/webp'}[ext.lstrip('.')])
+        except Exception as exc:
+            # A timed-out PUT may have committed remotely; deletion is safe to
+            # retry and the random key has no metadata row yet.
+            try:
+                object_storage.delete(filename)
+            except Exception:
+                pass  # Read-only reconciliation can identify a remaining orphan.
+            raise HTTPException(503, 'Private photo storage is temporarily unavailable') from exc
+    else:
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        if os.name == 'posix': UPLOAD_DIR.chmod(0o700)
+        with open(photo_path, 'xb') as output:
+            output.write(data)
+        if os.name == 'posix': photo_path.chmod(0o600)
     try:
         with connect() as db:
             db.execute('INSERT INTO attachments VALUES (?,?,?,?,?)',
                        (filename, user['id'], None, name, iso(datetime.now(timezone.utc))))
     except Exception:
-        photo_path.unlink(missing_ok=True)
+        if cloud:
+            try:
+                object_storage.delete(filename)
+            except Exception:
+                # An orphan can be found later by reconciling private bucket
+                # keys with the attachments table; never delete source files.
+                pass
+        else:
+            photo_path.unlink(missing_ok=True)
         raise
     return {'path':filename,'url':f'/api/attachments/{filename}',
             'description':mock_image_description(name),'filename':name,'size':len(data)}
@@ -468,8 +494,6 @@ async def upload_attachment(file: UploadFile = File(...), user: dict = Depends(c
 def fetch_attachment(filename: str, user: dict = Depends(current_user)):
     if not re.fullmatch(r'[a-f0-9]{24}\.(?:png|jpg|jpeg|webp)', filename):
         raise HTTPException(404, 'File not found')
-    path = UPLOAD_DIR / filename
-    if not path.is_file(): raise HTTPException(404, 'File not found')
     with connect() as db:
         row = db.execute('SELECT uploaded_by,complaint_id FROM attachments WHERE filename=?', (filename,)).fetchone()
         if not row:
@@ -479,6 +503,15 @@ def fetch_attachment(filename: str, user: dict = Depends(current_user)):
         elif row['uploaded_by'] != user['id']:
             raise HTTPException(404, 'File not found')
     media_type = {'png':'image/png','jpg':'image/jpeg','jpeg':'image/jpeg','webp':'image/webp'}[filename.rsplit('.',1)[-1]]
+    if object_storage.configured():
+        try:
+            data = object_storage.get(filename)
+        except Exception as exc:
+            raise HTTPException(503, 'Private photo storage is temporarily unavailable') from exc
+        if data is not None:
+            return Response(content=data, media_type=media_type)
+    path = UPLOAD_DIR / filename  # Read-only fallback for pre-existing local files.
+    if not path.is_file(): raise HTTPException(404, 'File not found')
     return FileResponse(path, media_type=media_type)
 
 
@@ -492,10 +525,10 @@ def create_complaint(body: CreateComplaintBody, user: dict = Depends(current_use
         raise HTTPException(422,'Provide a meaningful title and description')
     if body.channel == 'photo' and not body.attachment_path:
         raise HTTPException(422,'Photo channel requires an attached photo')
+    if body.attachment_path and mode() == 'public' and not object_storage.configured():
+        raise HTTPException(503, 'Photo submissions require durable storage')
     if body.attachment_path and not re.fullmatch(r'[a-f0-9]{24}\.(?:png|jpg|jpeg|webp)', body.attachment_path):
         raise HTTPException(422, 'Invalid photo reference')
-    if body.attachment_path and not (UPLOAD_DIR / body.attachment_path).is_file():
-        raise HTTPException(422, 'Uploaded photo not found')
     now = datetime.now(timezone.utc)
     citizen_id = user['id'] if user['role']=='citizen' else None
     with connect() as db:
@@ -504,6 +537,8 @@ def create_complaint(body: CreateComplaintBody, user: dict = Depends(current_use
                                     (body.attachment_path,)).fetchone()
             if not upload_row or upload_row['uploaded_by'] != user['id'] or upload_row['complaint_id'] is not None:
                 raise HTTPException(422, 'Photo does not belong to this session or is already attached')
+            if not object_storage.configured() and not (UPLOAD_DIR / body.attachment_path).is_file():
+                raise HTTPException(422, 'Uploaded photo not found')
         # Only the stored server-side original name can act as a mock visual hint.
         stored_hint = upload_row['original_name'] if body.attachment_path else ''
         ai = analyze(body.description, body.title, stored_hint)

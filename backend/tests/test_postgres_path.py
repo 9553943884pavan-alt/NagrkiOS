@@ -122,6 +122,9 @@ def test_admin_bootstrap_env_secret_is_one_time(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv('DATABASE_URL', raising=False)
     monkeypatch.setenv('NAGRIKOS_MODE', 'public')
     monkeypatch.setenv('NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD', 'unique bootstrap phrase 123')
+    # The production-target guard is tested separately; this test exercises
+    # the one-time account creation behavior against a disposable SQLite DB.
+    monkeypatch.setattr(provision_admin, 'check_admin_target', lambda: None)
     monkeypatch.setattr(provision_admin, 'password_policy', lambda password: None)
     monkeypatch.setattr(sys, 'argv', ['provision_admin.py', '--email', 'admin@example.org', '--name', 'Admin'])
     provision_admin.main()

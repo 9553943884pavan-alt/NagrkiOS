@@ -1,0 +1,80 @@
+{
+  "category_distribution": {
+    "Animal Husbandry": 51,
+    "Certificates": 4,
+    "Community Infrastructure and Services": 10,
+    "Crime and Safety": 10,
+    "Electricity and Power Supply": 19,
+    "Fire Safety": 1,
+    "Garbage and Unsanitary Practices": 245,
+    "Lakes": 2,
+    "Mobility - Roads, Footpaths and Infrastructure": 340,
+    "NULL": 1,
+    "Others": 20,
+    "Parks & Garden": 1,
+    "Parks & Recreation": 3,
+    "Pollution": 29,
+    "Power supply": 1,
+    "Public Toilets": 2,
+    "Public Transport - BMTC": 4,
+    "Public transport (BMTC and Metro)": 1,
+    "Ration Card": 1,
+    "Roads and Footpaths": 9,
+    "Safety and Crime": 2,
+    "Sanitation": 1,
+    "Sewerage Systems": 24,
+    "Solid Waste Management": 1,
+    "Storm Water Drains": 7,
+    "Street lighting": 48,
+    "Streetlights": 34,
+    "Traffic and Road Safety": 53,
+    "Trees and Saplings": 6,
+    "Water Supply": 2,
+    "Water Supply and Services": 27,
+    "Yellow Spot": 41
+  },
+  "distinct_texts": 1000,
+  "exact_duplicate_rows": 0,
+  "exact_text_with_conflicting_category_groups": 0,
+  "language_hints": {
+    "latin_script": 1000
+  },
+  "median_observed_closure_hours": null,
+  "missing_by_field": {
+    "closed_at": 1000,
+    "department": 1000,
+    "location": 1000,
+    "urgency": 1000
+  },
+  "negative_or_malformed_closure_dates": 0,
+  "notes": [
+    "These aggregate metrics disclose no complaint text.",
+    "Language fields may be source-provided or script-inferred; neither is independently verified here.",
+    "Observed closure intervals require censoring and case-definition review before ETA research."
+  ],
+  "privacy_review_required_count": 1000,
+  "records": 1000,
+  "related_groups": 1000,
+  "related_rows_beyond_group_representatives": 0,
+  "source_ids": [
+    "opencity_ichangemycity_2019_2022"
+  ],
+  "split_counts": {
+    "test": 167,
+    "train": 676,
+    "validation": 157
+  },
+  "status_distribution": {
+    "Closed": 7,
+    "On-the-Job": 100,
+    "Open": 541,
+    "Re-opened": 27,
+    "Rejected": 15,
+    "Resolved": 310
+  },
+  "subcategories_under_multiple_categories": 2,
+  "text_kinds": {
+    "narrative": 1000
+  },
+  "valid_closure_pairs": 0
+}

@@ -3,6 +3,8 @@ services:
     name: nagrikos-api
     runtime: python
     plan: free
+    region: singapore
+    autoDeployTrigger: 'off'
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -16,9 +18,13 @@ services:
         value: 'true'
       - key: NAGRIKOS_REQUIRE_POSTGRES
         value: 'true'
+      - key: NAGRIKOS_REQUIRE_DURABLE_STORAGE
+        value: 'true'
       - key: DATABASE_URL
         sync: false
-      - key: BREVO_API_KEY
+      - key: MAILJET_API_KEY
+        sync: false
+      - key: MAILJET_SECRET_KEY
         sync: false
       - key: MAIL_FROM
         sync: false
@@ -27,4 +33,16 @@ services:
       - key: PUBLIC_BASE_URL
         sync: false
       - key: CORS_ORIGINS
+        sync: false
+      - key: OBJECT_STORAGE_BUCKET
+        sync: false
+      - key: OBJECT_STORAGE_BACKEND
+        value: neon
+      - key: AWS_ENDPOINT_URL_S3
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
         sync: false

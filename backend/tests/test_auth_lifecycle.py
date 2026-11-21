@@ -19,7 +19,8 @@ MAILBOX = []
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv('DATABASE_PATH', str(tmp_path/'accounts.db'))
     monkeypatch.setenv('NAGRIKOS_TOTP_KEY_FILE', str(tmp_path/'totp.key'))
-    monkeypatch.setenv('BREVO_API_KEY', 'test-only-key')
+    monkeypatch.setenv('MAILJET_API_KEY', 'test-only-key')
+    monkeypatch.setenv('MAILJET_SECRET_KEY', 'test-only-secret')
     monkeypatch.setenv('MAIL_FROM', 'security@example.org')
     MAILBOX.clear()
     monkeypatch.setattr('app.account.send_mail', lambda _db, recipient, subject, body:
@@ -165,7 +166,8 @@ def test_public_mode_has_no_seed_and_breach_check_fails_closed(tmp_path, monkeyp
     monkeypatch.setenv('DATABASE_PATH',str(tmp_path/'public.db'))
     monkeypatch.setenv('COOKIE_SECURE','true')
     monkeypatch.setenv('NAGRIKOS_TOTP_KEY',Fernet.generate_key().decode())
-    monkeypatch.setenv('BREVO_API_KEY','test-only-key')
+    monkeypatch.setenv('MAILJET_API_KEY','test-only-key')
+    monkeypatch.setenv('MAILJET_SECRET_KEY','test-only-secret')
     monkeypatch.setenv('MAIL_FROM','security@example.com')
     monkeypatch.setenv('PUBLIC_BASE_URL','https://nagrikos.example.com')
     monkeypatch.setenv('CORS_ORIGINS','https://nagrikos.example.com')

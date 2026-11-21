@@ -19,4 +19,7 @@ frontend/dist/
 # IDE/system
 .DS_Store
 Thumbs.db
-.vscode/*.local.json
+.vscode/
+
+# Downloaded third-party ML records and derived data may contain personal information.
+ml/data/

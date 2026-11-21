@@ -1,0 +1,90 @@
+{
+  "category_distribution": {
+    "APPLIANCE": 1,
+    "Abandoned Vehicle": 16,
+    "Air Quality": 1,
+    "Animal-Abuse": 3,
+    "Blocked Driveway": 65,
+    "Curb Condition": 1,
+    "Dead Animal": 2,
+    "Dirty Condition": 2,
+    "Drinking": 1,
+    "Drug Activity": 2,
+    "ELECTRIC": 1,
+    "Elevator": 1,
+    "Encampment": 2,
+    "Food Poisoning": 4,
+    "GENERAL": 1,
+    "General Construction/Plumbing": 1,
+    "HEAT/HOT WATER": 24,
+    "Highway Condition": 1,
+    "Illegal Fireworks": 119,
+    "Illegal Parking": 94,
+    "Indoor Air Quality": 1,
+    "Lead": 1,
+    "Lost Property": 1,
+    "Noise": 2,
+    "Noise - Commercial": 78,
+    "Noise - Helicopter": 29,
+    "Noise - House of Worship": 1,
+    "Noise - Park": 2,
+    "Noise - Residential": 390,
+    "Noise - Street/Sidewalk": 93,
+    "Noise - Vehicle": 14,
+    "Non-Emergency Police Matter": 7,
+    "Obstruction": 1,
+    "PAINT/PLASTER": 5,
+    "PLUMBING": 7,
+    "Panhandling": 2,
+    "Rodent": 6,
+    "Sewer": 1,
+    "Special Projects Inspection Team (SPIT)": 1,
+    "Street Condition": 3,
+    "Taxi Complaint": 2,
+    "Traffic": 2,
+    "UNSANITARY CONDITION": 6,
+    "WATER LEAK": 2,
+    "Water System": 1
+  },
+  "distinct_texts": 66,
+  "exact_duplicate_rows": 934,
+  "exact_text_with_conflicting_category_groups": 4,
+  "language_hints": {
+    "latin_script": 1000
+  },
+  "median_observed_closure_hours": 0.6325000000000001,
+  "missing_by_field": {
+    "closed_at": 2,
+    "location": 1000,
+    "urgency": 1000
+  },
+  "negative_or_malformed_closure_dates": 0,
+  "notes": [
+    "These aggregate metrics disclose no complaint text.",
+    "Language fields may be source-provided or script-inferred; neither is independently verified here.",
+    "Observed closure intervals require censoring and case-definition review before ETA research.",
+    "Descriptor labels are not citizen complaint narratives or valid model features."
+  ],
+  "privacy_review_required_count": 1000,
+  "records": 1000,
+  "related_groups": 66,
+  "related_rows_beyond_group_representatives": 934,
+  "source_ids": [
+    "nyc_311_2024_bounded"
+  ],
+  "split_counts": {
+    "test": 35,
+    "train": 460,
+    "validation": 505
+  },
+  "status_distribution": {
+    "Closed": 998,
+    "In Progress": 1,
+    "Pending": 1
+  },
+  "subcategories_under_multiple_categories": 0,
+  "text_kinds": {
+    "descriptor_label": 1000
+  },
+  "valid_closure_pairs": 998
+}
