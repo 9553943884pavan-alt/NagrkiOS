@@ -228,6 +228,30 @@ def test_postgres_admin_preflight_never_inserts(monkeypatch, capsys):
     assert 'no user inserted' in capsys.readouterr().out
 
 
+def test_admin_preflight_classifies_password_failure_without_disclosing_value(monkeypatch, capsys):
+    import sys
+    from fastapi import HTTPException
+    from scripts import provision_admin
+
+    secret = 'dummy_private_password_marker'
+    monkeypatch.setenv('NAGRIKOS_MODE', 'public')
+    monkeypatch.setenv('NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD', secret)
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_EMAIL', 'admin@example.org')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_NAME', 'Admin')
+    monkeypatch.setattr(provision_admin, 'check_admin_target', lambda: None)
+    monkeypatch.setattr(provision_admin.postgres, 'enabled', lambda: True)
+    monkeypatch.setattr(provision_admin, 'initialize', lambda: pytest.fail('database opened'))
+    monkeypatch.setattr(provision_admin, 'password_policy',
+                        lambda password: (_ for _ in ()).throw(
+                            HTTPException(422, 'Use a password of 15 to 1024 characters')))
+    monkeypatch.setattr(sys, 'argv', ['provision_admin.py', '--preflight-only'])
+    with pytest.raises(HTTPException):
+        provision_admin.main()
+    output = capsys.readouterr()
+    assert 'invalid_length' in output.err
+    assert secret not in output.out + output.err
+
+
 def test_admin_cli_failure_hides_connection_details():
     import os
     import subprocess

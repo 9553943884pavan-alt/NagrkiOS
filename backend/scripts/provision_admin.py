@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+from fastapi import HTTPException
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.account import canonical, password_policy  # noqa: E402
 from app.auth import hash_password  # noqa: E402
@@ -47,7 +49,18 @@ def main():
         password=getpass.getpass('New administrator password: ')
         if password != getpass.getpass('Confirm password: '):
             parser.error('Passwords do not match')
-    password_policy(password)
+    try:
+        password_policy(password)
+    except HTTPException as exc:
+        if args.preflight_only:
+            category = {
+                'Use a password of 15 to 1024 characters': 'invalid_length',
+                'Choose a less common password': 'common_password',
+                'Password safety check is temporarily unavailable': 'safety_service_unavailable',
+                'This password has appeared in a data breach. Choose another.': 'breached_password',
+            }.get(exc.detail, 'policy_rejected')
+            print(f'Admin preflight password policy FAILED: {category}', file=sys.stderr)
+        raise
     if args.preflight_only:
         print('Admin preflight password policy PASSED')
     initialize()
