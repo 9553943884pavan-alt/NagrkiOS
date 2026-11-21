@@ -1,0 +1,55 @@
+name: Smoke test Neon testing branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      testing_branch_id:
+        description: 'Verified Neon testing branch ID (br-...)'
+        required: true
+        type: string
+      approval:
+        description: 'Enter RUN-TESTING-SMOKE after the owner approves testing-branch writes'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-schema-testing
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: neon-schema
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Guard testing target and run rollback-only smoke test
+        working-directory: backend
+        shell: bash
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_TESTING_DIRECT_HOST: ${{ secrets.NEON_TESTING_DIRECT_HOST }}
+          NEON_PRODUCTION_DIRECT_HOST: ${{ secrets.NEON_PRODUCTION_DIRECT_HOST }}
+          NEON_TESTING_BRANCH_ID: ${{ inputs.testing_branch_id }}
+          CONFIRMED_TESTING_BRANCH_ID: ${{ secrets.NEON_TESTING_BRANCH_ID }}
+          SMOKE_APPROVAL: ${{ inputs.approval }}
+        run: |
+          set -euo pipefail
+          if [ "$SMOKE_APPROVAL" != 'RUN-TESTING-SMOKE' ]; then
+            echo 'Explicit testing-smoke approval phrase is required'; exit 1
+          fi
+          if [ -z "$CONFIRMED_TESTING_BRANCH_ID" ] || [ "$NEON_TESTING_BRANCH_ID" != "$CONFIRMED_TESTING_BRANCH_ID" ]; then
+            echo 'Testing branch ID does not match the protected environment'; exit 1
+          fi
+          python scripts/check_testing_target.py
+          python scripts/smoke_neon_testing.py
