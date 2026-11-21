@@ -105,6 +105,8 @@ def test_admin_workflows_are_manual_protected_and_target_pinned():
 def test_admin_bootstrap_workflow_requires_dispatch_phrase_and_keeps_secrets_out_of_args():
     source = (BACKEND.parent / '.github/workflows/provision-admin.yml').read_text(encoding='utf-8')
     assert 'PROVISION-FIRST-ADMIN' in source
+    assert 'READ-ONLY-ADMIN-PREFLIGHT' in source
+    assert 'python scripts/provision_admin.py --preflight-only' in source
     assert 'timeout-minutes: 15' in source
     assert 'persist-credentials: false' in source
     assert 'python scripts/provision_admin.py\n' in source

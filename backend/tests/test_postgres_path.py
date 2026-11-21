@@ -192,6 +192,42 @@ def test_postgres_admin_bootstrap_locks_before_duplicate_check(monkeypatch):
     assert statements[-1].startswith('INSERT INTO users(')
 
 
+def test_postgres_admin_preflight_never_inserts(monkeypatch, capsys):
+    import contextlib
+    import sys
+    from scripts import provision_admin
+
+    statements = []
+
+    class Result:
+        def fetchone(self):
+            return None
+
+    class Connection:
+        def execute(self, sql, params=()):
+            statements.append(sql)
+            return Result()
+
+    @contextlib.contextmanager
+    def fake_connect():
+        yield Connection()
+
+    monkeypatch.setenv('NAGRIKOS_MODE', 'public')
+    monkeypatch.setenv('NAGRIKOS_BOOTSTRAP_ADMIN_PASSWORD', 'unique bootstrap phrase 123')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_EMAIL', 'admin@example.org')
+    monkeypatch.setenv('BOOTSTRAP_ADMIN_NAME', 'Admin')
+    monkeypatch.setattr(provision_admin, 'check_admin_target', lambda: None)
+    monkeypatch.setattr(provision_admin, 'password_policy', lambda password: None)
+    monkeypatch.setattr(provision_admin, 'initialize', lambda: None)
+    monkeypatch.setattr(provision_admin, 'connect', fake_connect)
+    monkeypatch.setattr(provision_admin.postgres, 'enabled', lambda: True)
+    monkeypatch.setattr(sys, 'argv', ['provision_admin.py', '--preflight-only'])
+    provision_admin.main()
+    assert statements[0] == 'SET TRANSACTION READ ONLY'
+    assert all(not statement.startswith('INSERT') for statement in statements)
+    assert 'no user inserted' in capsys.readouterr().out
+
+
 def test_admin_cli_failure_hides_connection_details():
     import os
     import subprocess
