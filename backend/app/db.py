@@ -229,6 +229,7 @@ def reset_demo() -> None:
     if os.getenv('NAGRIKOS_MODE') != 'demo':
         raise ValueError('Demo reset is available only in explicit demo mode')
     with connect() as db:
+        db.execute('DELETE FROM staff_invitations')
         db.execute('DELETE FROM notes')
         db.execute('DELETE FROM history')
         db.execute('DELETE FROM complaints')

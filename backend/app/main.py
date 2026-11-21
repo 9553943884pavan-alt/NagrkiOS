@@ -427,7 +427,7 @@ async def upload_attachment(file: UploadFile = File(...), user: dict = Depends(c
     from PIL import Image, UnidentifiedImageError
     try:
         Image.MAX_IMAGE_PIXELS = 24_000_000
-        with Image.open(io.BytesIO(data)) as im:
+        with Image.open(io.BytesIO(data), formats=['PNG', 'JPEG', 'WEBP']) as im:
             if im.width * im.height > 24_000_000:
                 raise HTTPException(413,'Photo dimensions are too large')
             im.verify()
@@ -436,7 +436,7 @@ async def upload_attachment(file: UploadFile = File(...), user: dict = Depends(c
     # Re-encode and remove EXIF/GPS and ancillary metadata rather than serving raw camera uploads.
     try:
         from PIL import ImageOps
-        with Image.open(io.BytesIO(data)) as image:
+        with Image.open(io.BytesIO(data), formats=['PNG', 'JPEG', 'WEBP']) as image:
             if image.width * image.height > 24_000_000:
                 raise HTTPException(413,'Photo dimensions are too large')
             clean = ImageOps.exif_transpose(image)
@@ -555,7 +555,11 @@ def create_complaint(body: CreateComplaintBody, user: dict = Depends(current_use
         ticket_no = f'UP-{now.year}-{case_id:06d}'
         db.execute('UPDATE complaints SET ticket_no=? WHERE id=?',(ticket_no,case_id))
         if body.attachment_path:
-            db.execute('UPDATE attachments SET complaint_id=? WHERE filename=?', (case_id,body.attachment_path))
+            claimed = db.execute('UPDATE attachments SET complaint_id=? '
+                                 'WHERE filename=? AND uploaded_by=? AND complaint_id IS NULL RETURNING filename',
+                                 (case_id,body.attachment_path,user['id'])).fetchone()
+            if claimed is None:
+                raise HTTPException(409, 'Photo was already attached to another complaint')
         add_history(db,case_id,user['id'],'created','Complaint submitted and queued for human review.')
     with connect() as db:
         return get_complaint(db, case_id, user)

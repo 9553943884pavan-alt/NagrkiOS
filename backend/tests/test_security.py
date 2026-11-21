@@ -125,6 +125,38 @@ def test_photo_owner_access_and_one_use_reference(client):
     assert client.post('/api/complaints',headers=citizen,json=complaint).status_code==422
     assert not client.get(body['url'],headers=citizen).headers['content-type'].startswith('text/html')
 
+
+def test_photo_claim_rechecks_ownership_after_analysis(client, monkeypatch):
+    from app import main
+
+    citizen = login(client, 'citizen@demo.in')
+    photo = client.post('/api/attachments', headers=citizen,
+                        files={'file': ('street.png', PNG, 'image/png')}).json()
+    with connect() as db:
+        existing_id = db.execute('SELECT id FROM complaints LIMIT 1').fetchone()[0]
+        before = db.execute('SELECT COUNT(*) FROM complaints').fetchone()[0]
+
+    original_analyze = main.analyze
+
+    def claim_during_analysis(*args):
+        # A second request claims the photo after the first request's read.
+        with connect() as db:
+            db.execute('UPDATE attachments SET complaint_id=? WHERE filename=?',
+                       (existing_id, photo['path']))
+        return original_analyze(*args)
+
+    monkeypatch.setattr(main, 'analyze', claim_during_analysis)
+    response = client.post('/api/complaints', headers=citizen, json={
+        'title': 'Broken street sewer pipe',
+        'description': 'The road is flooding near homes for several days.',
+        'district': 'Prayagraj', 'channel': 'photo', 'attachment_path': photo['path']
+    })
+    assert response.status_code == 409
+    with connect() as db:
+        assert db.execute('SELECT COUNT(*) FROM complaints').fetchone()[0] == before
+        assert db.execute('SELECT complaint_id FROM attachments WHERE filename=?',
+                          (photo['path'],)).fetchone()[0] == existing_id
+
 def test_reset_revokes_sessions_and_photo_bytes(client):
     admin=login(client)
     citizen=login(client,'citizen@demo.in')
@@ -134,6 +166,21 @@ def test_reset_revokes_sessions_and_photo_bytes(client):
     assert client.get('/api/auth/me',headers=citizen).status_code==401
     assert client.get(photo['url'],headers=citizen).status_code==401
     assert not (Path(os.environ['DATABASE_PATH']).parent/'uploads'/photo['path']).exists()
+
+
+def test_demo_reset_removes_pending_staff_invitations_before_users(client):
+    admin = login(client)
+    with connect() as db:
+        db.execute('INSERT INTO staff_invitations '
+                   '(token_hash,email,name,role,department,district,expires_at,invited_by) '
+                   'VALUES (?,?,?,?,?,?,?,?)',
+                   (token_hash('test-only-invitation'), 'staff@example.org', 'Staff Member',
+                    'officer', 'Public Works Department', 'Lucknow', int(time.time()) + 3600, 1))
+    response = client.post('/api/admin/reset-demo', headers=admin, json={})
+    assert response.status_code == 200
+    with connect() as db:
+        assert db.execute('SELECT COUNT(*) FROM staff_invitations').fetchone()[0] == 0
+        assert db.execute('SELECT COUNT(*) FROM users').fetchone()[0] == 5
 
 def test_request_origin_and_validation(client):
     admin=login(client)

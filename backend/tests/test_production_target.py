@@ -100,6 +100,8 @@ def test_remaining_admin_workflow_is_manual_protected_and_target_pinned():
         assert 'NEON_PRODUCTION_PROJECT_ID: winter-meadow-40329605' in source
         assert 'NEON_PRODUCTION_BRANCH_ID: br-super-glitter-a769u0u1' in source
         assert 'permissions:\n  contents: read' in source
+        assert 'DISABLE-NEON-DEMO-CREDENTIALS' in source
+        assert source.index('Explicit demo credential cleanup approval phrase is required') < source.index('python scripts/disable_demo_credentials.py')
 
 
 def test_one_time_admin_workflow_and_secret_references_are_retired():
