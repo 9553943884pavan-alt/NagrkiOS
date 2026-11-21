@@ -7,12 +7,17 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 from app.models import metadata
+from scripts.check_testing_target import check_target
 
 config = context.config
 target_metadata = metadata
 
 
 def direct_url():
+    # Protect direct Alembic invocations as well as the GitHub workflow.
+    # An operator must update the pinned branch mapping after a verified
+    # endpoint change before any migration can connect elsewhere.
+    check_target()
     value = os.environ.get('DIRECT_URL', '').strip()
     parsed = urlsplit(value)
     if parsed.scheme not in {'postgresql', 'postgresql+psycopg'} or not parsed.hostname:

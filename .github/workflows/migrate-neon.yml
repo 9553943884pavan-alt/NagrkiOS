@@ -2,9 +2,26 @@ name: Migrate Neon schema
 
 on:
   workflow_dispatch:
+    inputs:
+      testing_branch_id:
+        description: 'Testing branch ID verified in Neon Console (br-...)'
+        required: true
+        type: string
+      backup_branch_id:
+        description: 'READY pre-migration backup branch ID verified in Neon Console (br-...)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-schema-testing
+  cancel-in-progress: false
 
 jobs:
   migrate:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: neon-schema
     steps:
@@ -16,9 +33,23 @@ jobs:
         run: python -m pip install 'SQLAlchemy>=2.0,<3' 'psycopg[binary]>=3.2,<4' 'alembic>=1.14,<2'
       - name: Apply versioned schema
         working-directory: backend
+        shell: bash
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_TESTING_DIRECT_HOST: ${{ secrets.NEON_TESTING_DIRECT_HOST }}
+          NEON_PRODUCTION_DIRECT_HOST: ${{ secrets.NEON_PRODUCTION_DIRECT_HOST }}
+          NEON_TESTING_BRANCH_ID: ${{ inputs.testing_branch_id }}
+          CONFIRMED_TESTING_BRANCH_ID: ${{ secrets.NEON_TESTING_BRANCH_ID }}
+          NEON_BACKUP_BRANCH_ID: ${{ inputs.backup_branch_id }}
         run: |
-          if [ -z "$DIRECT_URL" ]; then echo 'Set DIRECT_URL in neon-schema environment secrets'; exit 1; fi
+          set -euo pipefail
+          if [[ ! "$NEON_TESTING_BRANCH_ID" =~ ^br-[a-zA-Z0-9-]+$ ]]; then
+            echo 'A verified Neon testing branch ID is required'; exit 1
+          fi
+          if [ -z "$CONFIRMED_TESTING_BRANCH_ID" ] || [ "$NEON_TESTING_BRANCH_ID" != "$CONFIRMED_TESTING_BRANCH_ID" ]; then
+            echo 'Testing branch ID does not match the protected environment'; exit 1
+          fi
+          python scripts/check_testing_target.py --require-backup
           alembic upgrade head
           alembic current
