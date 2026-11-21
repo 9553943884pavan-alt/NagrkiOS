@@ -89,8 +89,8 @@ def test_admin_write_entrypoints_guard_before_database(monkeypatch):
         disable_demo_credentials.main()
 
 
-def test_admin_workflows_are_manual_protected_and_target_pinned():
-    for name in ('provision-admin.yml', 'disable-neon-demo.yml'):
+def test_remaining_admin_workflow_is_manual_protected_and_target_pinned():
+    for name in ('disable-neon-demo.yml',):
         source = (BACKEND.parent / '.github/workflows' / name).read_text(encoding='utf-8')
         assert 'workflow_dispatch:' in source
         assert "if: github.ref == 'refs/heads/main'" in source
@@ -102,20 +102,12 @@ def test_admin_workflows_are_manual_protected_and_target_pinned():
         assert 'permissions:\n  contents: read' in source
 
 
-def test_admin_bootstrap_workflow_requires_dispatch_phrase_and_keeps_secrets_out_of_args():
-    source = (BACKEND.parent / '.github/workflows/provision-admin.yml').read_text(encoding='utf-8')
-    assert 'PROVISION-FIRST-ADMIN' in source
-    assert 'READ-ONLY-ADMIN-PREFLIGHT' in source
-    assert 'python scripts/provision_admin.py --preflight-only' in source
-    assert 'timeout-minutes: 15' in source
-    assert 'persist-credentials: false' in source
-    assert 'python scripts/provision_admin.py\n' in source
-    assert 'python scripts/provision_admin.py --email' not in source
-    assert 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' in source
-    assert 'actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0' in source
-    for name in ('DATABASE_URL', 'BOOTSTRAP_ADMIN_EMAIL', 'BOOTSTRAP_ADMIN_NAME',
-                 'BOOTSTRAP_ADMIN_PASSWORD'):
-        assert f'secrets.{name}' in source
+def test_one_time_admin_workflow_and_secret_references_are_retired():
+    workflow_dir = BACKEND.parent / '.github/workflows'
+    assert not (workflow_dir / 'provision-admin.yml').exists()
+    for path in workflow_dir.glob('*.yml'):
+        source = path.read_text(encoding='utf-8')
+        assert 'BOOTSTRAP_ADMIN_' not in source
 
 
 def test_valid_production_pair_is_offline_only():
