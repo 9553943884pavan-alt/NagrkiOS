@@ -1,4 +1,4 @@
-import {useEffect,useState,type ReactNode} from 'react';
+import {useEffect,useRef,useState,type KeyboardEvent as ReactKeyboardEvent,type ReactNode} from 'react';
 import {NavLink,useLocation,useNavigate} from 'react-router-dom';
 import {Activity,BarChart3,Bell,Building2,ChevronDown,ClipboardList,Command,FilePlus2,Home,LayoutDashboard,LogOut,Menu,Search,Settings2,ShieldCheck,SlidersHorizontal, X} from 'lucide-react';
 import {useAuth} from '../context/AuthContext';
@@ -27,13 +27,21 @@ export default function AppShell({children}:{children:ReactNode}){
  const [search,setSearch]=useState('');const [profileOpen,setProfileOpen]=useState(false);
  const [notifsOpen,setNotifsOpen]=useState(false);
  const [demo,setDemo]=useState(false);
+ const [mobileViewport,setMobileViewport]=useState(()=>window.matchMedia('(max-width:880px)').matches);
+ const mobileMenuButton=useRef<HTMLButtonElement>(null);
+ const mobileCloseButton=useRef<HTMLButtonElement>(null);
  useEffect(()=>{api<{demo_enabled:boolean}>('/api/auth/config').then(x=>setDemo(x.demo_enabled)).catch(()=>{});},[]);
+ useEffect(()=>{const media=window.matchMedia('(max-width:880px)');const sync=()=>{setMobileViewport(media.matches);if(!media.matches)setMobileOpen(false);};media.addEventListener('change',sync);return()=>media.removeEventListener('change',sync);},[]);
+ useEffect(()=>{if(mobileViewport&&mobileOpen)mobileCloseButton.current?.focus();},[mobileViewport,mobileOpen]);
+ useEffect(()=>{if(!mobileOpen)return;const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){setMobileOpen(false);requestAnimationFrame(()=>mobileMenuButton.current?.focus());}};document.addEventListener('keydown',escape);return()=>document.removeEventListener('keydown',escape);},[mobileOpen]);
+ const closeMobileMenu=()=>{setMobileOpen(false);requestAnimationFrame(()=>mobileMenuButton.current?.focus());};
+ const trapMobileFocus=(event:ReactKeyboardEvent<HTMLElement>)=>{if(!mobileViewport||!mobileOpen||event.key!=='Tab')return;const nodes=Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),a[href]'));const first=nodes[0],last=nodes[nodes.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}};
  const nav=user?.role==='admin'?adminNav:user?.role==='officer'?officerNav:citizenNav;
  const current = [...nav,{label:'Settings',path:'/settings',icon:Settings2}].find(n=>n.path===location.pathname);
- const navlink=(item:NavItem)=><NavLink end={item.path==='/'} key={item.path} to={item.path} title={item.label} onClick={()=>setMobileOpen(false)} className={({isActive})=>`side-link ${isActive?'selected':''}`}><item.icon size={19}/><span>{item.label}</span></NavLink>;
+ const navlink=(item:NavItem)=><NavLink end={item.path==='/'} key={item.path} to={item.path} title={item.label} onClick={closeMobileMenu} className={({isActive})=>`side-link ${isActive?'selected':''}`}><item.icon size={19}/><span>{item.label}</span></NavLink>;
  return <div className={`shell ${collapsed?'is-collapsed':''}`}>
-   <aside className={`sidebar ${mobileOpen?'mobile-open':''}`}>
-     <div className="brand"><div className="brand-mark"><Activity size={23} strokeWidth={2.5}/></div><div className="brand-text"><strong>Nagrik<span>OS</span></strong><small>Civic Intelligence Platform</small></div><button className="sidebar-close" onClick={()=>setMobileOpen(false)} aria-label="Close menu"><X size={19}/></button></div>
+   <aside className={`sidebar ${mobileOpen?'mobile-open':''}`} inert={mobileViewport&&!mobileOpen} aria-hidden={mobileViewport&&!mobileOpen} role={mobileViewport&&mobileOpen?'dialog':undefined} aria-modal={mobileViewport&&mobileOpen?true:undefined} aria-label={mobileViewport&&mobileOpen?'Navigation menu':undefined} onKeyDown={trapMobileFocus}>
+     <div className="brand"><div className="brand-mark"><Activity size={23} strokeWidth={2.5}/></div><div className="brand-text"><strong>Nagrik<span>OS</span></strong><small>Civic Intelligence Platform</small></div><button ref={mobileCloseButton} className="sidebar-close" onClick={closeMobileMenu} aria-label="Close menu"><X size={19}/></button></div>
      <div className="sidebar-inner">
        <div className="sidebar-label">WORKSPACE</div>
        <nav className="side-nav">{nav.map(navlink)}</nav>
@@ -45,9 +53,9 @@ export default function AppShell({children}:{children:ReactNode}){
        </div>
      </div>
    </aside>
-   {mobileOpen&&<button className="mobile-overlay" onClick={()=>setMobileOpen(false)} aria-label="Close menu"/>}
-   <div className="main-area"><header className="topbar">
-     <div className="topbar-left"><button className="icon-button mobile-menu" onClick={()=>setMobileOpen(true)} aria-label="Open menu"><Menu size={21}/></button><span className="breadcrumb-parent">Workspace</span><span className="breadcrumb-sep">/</span><span className="breadcrumb-current">{current?.label||'Case details'}</span></div>
+   {mobileOpen&&<button className="mobile-overlay" onClick={closeMobileMenu} aria-label="Close menu" aria-hidden="true" tabIndex={-1}/>}
+   <div className="main-area" inert={mobileViewport&&mobileOpen} aria-hidden={mobileViewport&&mobileOpen}><header className="topbar">
+     <div className="topbar-left"><button ref={mobileMenuButton} className="icon-button mobile-menu" onClick={()=>setMobileOpen(true)} aria-label="Open menu" aria-expanded={mobileOpen}><Menu size={21}/></button><span className="breadcrumb-parent">Workspace</span><span className="breadcrumb-sep">/</span><span className="breadcrumb-current">{current?.label||'Case details'}</span></div>
      <div className="topbar-right">
        <form className="top-search" onSubmit={e=>{e.preventDefault();navigate(`/cases?search=${encodeURIComponent(search)}`);setSearch('');}}><Search size={17}/><input placeholder="Search cases, tickets..." aria-label="Search cases" value={search} onChange={e=>setSearch(e.target.value)}/><kbd>↵</kbd></form>
        {demo&&<span className="top-env"><span className="online-dot"/> DEMO</span>}
