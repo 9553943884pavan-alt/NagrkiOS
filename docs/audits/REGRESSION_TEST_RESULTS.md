@@ -2,6 +2,18 @@
 
 **Run date:** 21 November 2026 (Asia/Kolkata). All backend tests cleared `DATABASE_URL`, `DIRECT_URL`, Mailjet and object-storage credentials from the test process and set `NAGRIKOS_MODE=demo`. No production database or bucket was used.
 
+## Follow-up publication and remediation pass
+
+Before publishing the original audit commits, the Windows backend suite again returned **220 passed, 2 skipped**; frontend typecheck and WSL build passed. npm audit reported zero advisories, pip-audit reported no known vulnerabilities for the resolved backend requirements, focused Ruff `E9,F63,F7,F82` passed, and checksum-verified actionlint 1.7.12 passed the original three workflows. Broad Ruff reported 140 findings, mostly the documented style backlog; it is not a passing broad-lint gate.
+
+With seven added isolated backend regressions, the full Linux Python 3.12 suite passed **229 tests**. The final Windows run passed **227 tests, 2 skipped**. The Linux run recorded an existing Starlette/httpx deprecation and a local pytest cache-permission warning; Windows recorded the Starlette warning. Both runs removed production database, Mailjet and object-storage credentials from the test process. The new tests cover repeated S3 listing tokens, CSRF/session/role/MFA edges, and ambiguous Mailjet timeout one-attempt behavior. Independent QA reran all seven new tests: **7 passed**. The four-workflow actionlint check passed after adding the non-deploying CI workflow; that workflow has not yet run on GitHub.
+
+Synthetic Chromium browser checks covered **112 authenticated role/route/width loads** (16 states at 320, 375, 390, 768, 1024, 1440 and 1920 px) with zero settled document overflow. Six anonymous account screens covered **42 width loads**, also with zero overflow. A synthetic mobile-menu keyboard test passed focus containment, background inertness, Escape focus restoration and desktop-resize cleanup. Axe-core 4.10.3 at 390 px found **zero A/AA rule violations across all 16 authenticated and six anonymous tested states** after fixes; initially every state had serious contrast findings. These are tested states, not full WCAG conformance. Firefox could not launch in the Windows environment because `lgpllibs.dll` was missing, and WebKit was not installed.
+
+The final anonymous rerun found and verified a same-tab fragment-navigation fix. A separate mocked browser regression passed reset, verify and invitation link navigation, confirmed each request used the current synthetic token, and checked hash removal and a late response (**4 mocked requests, 0 live account actions**). The mobile menu and department native-link keyboard regressions also passed after the final changes.
+
+An earlier warm local built-preview Chromium sample on synthetic admin Overview at 1440 px measured FCP 208 ms, LCP 812 ms and CLS 0.0263. These are lab samples, not hosted or field Core Web Vitals. The final index bundle measured 118.27 KB gzip versus 117.65 KB for the previous audit build.
+
 | Check | Executed result | Limit |
 | --- | --- | --- |
 | Baseline backend `pytest -q` | 218 passed, 2 skipped; one upstream Starlette/httpx deprecation warning | Before new regressions |

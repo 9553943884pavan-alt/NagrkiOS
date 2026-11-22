@@ -1,15 +1,37 @@
-# NagrikOS audit task board
+# NagrikOS audit and remediation task board
 
-Baseline: `cdfa02a7d43e478da49b16a5e43dba070cc003cb` on `main`; working tree clean at start. Scope is local code and read-only hosted checks. Production deployment and data changes are excluded.
+**Updated:** 22 November 2026 (Asia/Kolkata). Original baseline: `cdfa02a7d43e478da49b16a5e43dba070cc003cb`. The first repair batch was published to `main` at `ea68b3594cd25414a934815da07cffad0afaa7d8` after operator authorization. The follow-up batch below is being integrated and tested locally. No production data, storage object, mail credential or schema was modified.
 
-| Priority | Area | Owner | Status | Gate |
-| --- | --- | --- | --- | --- |
-| P0/P1 | Access control, authentication, CSRF, cross-user isolation | Lead + backend | Validated locally | Negative authorization tests and code review; hosted auth remains Blocked |
-| P0/P1 | Data integrity, attachment ownership, transactions | Backend | Fixed and Validated locally | Isolated database/storage tests |
-| P1/P2 | CI, deployment configuration, secrets and integrations | Infrastructure | Fixed and Validated locally | actionlint and read-only health checks; production deployment Blocked |
-| P1/P2 | Frontend routes, state, accessibility, visual layout | Frontend + independent QA | Fixed and Validated on tested routes | TypeScript, Chromium and viewport checks; untested routes recorded |
-| P1/P2 | Dependency advisories and performance | Lead + frontend | Fixed and Validated locally | npm/pip audits, build and bundle measurements |
-| P1/P2 | Independent regression and integration review | Independent QA + lead | Validated locally | Backend suite, isolated Chromium checks, workflow lint |
-| P3 | Final audit reports and release decision | Lead | Validated | Evidence ledger and explicit untested areas; production release Blocked |
+Status terms: **Fixed** means code changed; **Validated** means a relevant test passed; **Blocked** requires access or authorization; **Unresolved** has no completed fix. Browser tests below use synthetic fixtures unless stated otherwise.
 
-Statuses: Pending, In Progress, Fixed, Validated, Blocked. A scanner result alone cannot close a finding.
+| ID / severity | Responsible agent | Reproduction evidence and root cause | Modified files | Fix commit | Test evidence | Final status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F-01 / P2 | Backend | Intervening attachment claim could overwrite complaint ownership after a prior read. | `backend/app/main.py`, `backend/tests/test_security.py` | `c0366c7` | Forced competing claim returns 409; baseline backend 220 passed, 2 skipped | Validated; published |
+| F-02 / P2 | Backend | Demo reset deleted inviter before pending staff invitation, violating its foreign key. | `backend/app/db.py`, `backend/tests/test_security.py` | `c0366c7` | Reset-with-invitation regression; baseline backend suite | Validated; published |
+| F-03 / P2 | Frontend | Global 360 px minimum forced overflow at 320 px. | `frontend/src/styles.css` | `c0366c7` | Login document width 360 before, 320 after; screenshots | Validated; published |
+| F-04 / P2 | Frontend | Case filters, stale response, officer action and row semantics behaved incorrectly. | `frontend/src/pages/Cases.tsx`, `frontend/tests/cases-smoke.js` | `c0366c7` | Four synthetic browser assertions passed | Validated; published |
+| F-05 / P2 | Infrastructure | Destructive manual demo-credential workflow lacked explicit intent text. | `.github/workflows/disable-neon-demo.yml`, `backend/tests/test_production_target.py` | `c0366c7` | Target guard tests and actionlint passed; workflow not dispatched | Validated; published |
+| F-06 / P2 | Frontend | Chart chunk preloaded on the initial page for all roles. | `frontend/src/App.tsx`, `frontend/vite.config.ts` | `c0366c7` | Initial HTML-referenced JS 247.52 to 117.65 KB gzip | Validated; published |
+| F-07 / P1 | Security | Pillow 12.3.0 and cryptography 48.0.1 were within advised ranges. | `backend/requirements.txt`, `backend/app/main.py` | `c0366c7` | Local Pillow 13.0.0/cryptography 50.0.2, 220 tests, pip-audit zero; Render deployed but package inventory unread | Validated in code; deployed-version verification Blocked |
+| F-08 / P2 | Frontend | Voice controls extended to 326 px at a 320 px New Grievance viewport. | `frontend/src/styles.css`, `frontend/tests/new-viewport-smoke.js` | `c0366c7` | Synthetic width 326 before, 320 after; screenshots | Validated; published |
+| F-09 / P3 | Backend reliability | Repeated S3 continuation tokens could keep private-object reconciliation looping. | `backend/app/object_storage.py`, `backend/tests/test_reliability.py` | `9481d15` | Two pagination regressions and 39 focused DB/storage tests passed | Validated locally |
+| F-10 / P2 | Infrastructure | `main` had zero check runs; three existing workflows were manual-only. | `.github/workflows/validate.yml` | `9481d15` | Actionlint passed four workflows; Linux Python 229 passed; frontend build/audit passed locally | Fixed locally; required-check cloud gate Unresolved |
+| F-11 / P3 | Infrastructure | Hosted static pages lacked `nosniff`; hashed assets had `max-age=0`. | `frontend/vercel.json` | `9481d15` | Config parses; local header assertions pass; hosted API remains `no-store` | Fixed locally; hosted response verification Blocked until deploy |
+| F-12 / P2 coverage | Security | CSRF, live role downgrade and MFA-session edges lacked dedicated negative regressions. | `backend/tests/test_security_hardening.py` | `9481d15` | Three new tests; 25 focused passed; no bypass reproduced | Validated locally |
+| F-13 / P2 coverage | Mail/auth | Ambiguous Mailjet timeout requires one-attempt behavior and rolled-back links. | `backend/tests/test_account_reliability.py` | `9481d15` | Two mocked timeout tests; 29 combined Mailjet tests passed | Validated locally; transactional outbox Unresolved |
+| F-14 / P2 | Frontend | Closed mobile menu remained keyboard-focusable off screen. | `frontend/src/components/AppShell.tsx`, `frontend/tests/mobile-nav-smoke.js` | `9481d15` | Focus trap, inert background, Escape restoration and desktop-resize checks passed | Validated locally |
+| F-15 / P2 | Frontend | File input lacked a name; department search/case notes and row navigation had accessibility gaps. | `frontend/src/pages/NewComplaint.tsx`, `Departments.tsx`, `CaseDetail.tsx` | `9481d15` | Axe structural checks and native-link keyboard regression passed | Validated locally |
+| F-16 / P2 | Frontend | Serious contrast violations affected all 22 scanned route/screen states at 390 px. | `frontend/src/styles.css`, `frontend/package.json`, `frontend/package-lock.json`, browser smoke scripts | `9481d15` | Final axe A/AA rule scan zero violations on 16 authenticated and 6 anonymous synthetic states; 154 width loads without overflow | Validated in tested states; full WCAG Unverified |
+| F-17 / P2 | Frontend/mail-auth | Login module captured fragment once; same-tab account links could leave a stale screen/token. | `frontend/src/pages/Login.tsx`, `frontend/tests/hash-link-smoke.js` | `9481d15` | Mocked reset/verify/invite token, hash-removal and late-response tests plus anonymous 42-width rerun passed | Validated locally |
+
+## Residual release work
+
+| ID / severity | Owner | Evidence and remaining work | Status |
+| --- | --- | --- | --- |
+| R-01 / P1 public release | Operator / infrastructure | GitHub `main` is unprotected; Neon production-branch protection could not be rechecked. Enable required checks/review before relying on a protected public release. | Unresolved |
+| R-02 / P2 | Backend / operator | Mailjet sends before transaction commit. A safe encrypted outbox needs a reviewed schema migration, worker, bounded retries and uncertain-outcome reconciliation; no partial worker deployed. | Unresolved |
+| R-03 / P2 | Operator / infrastructure | Render deployed on `main` push despite tracked `autoDeployTrigger: 'off'`; reconcile effective integration setting and rollback plan. | Unresolved |
+| R-04 / P1 public release | Operator / QA | Hosted admin sign-in/MFA, role isolation, signup/recovery, private storage writes and deployed Python versions remain unverified. No production test account or destructive flow was created. | Blocked on controlled hosted verification |
+| R-05 / P3 | Operator | `neon-admin` lists `DATABASE_URL` only; protected demo cleanup also requires `DIRECT_URL` and would fail closed. Do not dispatch without separate approval. | Blocked |
+
+Detailed evidence and decision: [final remediation report](FINAL_REMEDIATION_REPORT.md), [regression results](REGRESSION_TEST_RESULTS.md), [release readiness](RELEASE_READINESS.md).

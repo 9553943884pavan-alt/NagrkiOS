@@ -4,30 +4,31 @@ import {useAuth} from '../context/AuthContext';
 import {api,post} from '../lib/api';
 
 type Screen='login'|'signup'|'pending'|'forgot'|'reset'|'verify'|'invite'|'mfa';
-const params=new URLSearchParams(window.location.hash.startsWith('#')?window.location.hash.slice(1):window.location.search);
-const initial:Screen=params.has('verify')?'verify':params.has('reset')?'reset':params.has('invite')?'invite':'login';
+function linkParams(){return new URLSearchParams(window.location.hash.startsWith('#')?window.location.hash.slice(1):window.location.search);}
+function linkScreen():Screen{const params=linkParams();return params.has('verify')?'verify':params.has('reset')?'reset':params.has('invite')?'invite':'login';}
 const roles=import.meta.env.DEV
  ? [{label:'Administrator',email:'admin@demo.in'},{label:'Desk officer',email:'officer@demo.in'},{label:'Citizen',email:'citizen@demo.in'}]
  : [];
 
 export default function Login(){
  const {login,completeMfa}=useAuth();
- const [screen,setScreen]=useState<Screen>(initial),[demo,setDemo]=useState(false),[demoPassword,setDemoPassword]=useState(''),[mailReady,setMailReady]=useState(false);
+ const [screen,setScreen]=useState<Screen>(linkScreen),[demo,setDemo]=useState(false),[demoPassword,setDemoPassword]=useState(''),[mailReady,setMailReady]=useState(false);
  const [name,setName]=useState(''),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[confirm,setConfirm]=useState('');
  const [code,setCode]=useState(''),[challenge,setChallenge]=useState(''),[showPassword,setShowPassword]=useState(false);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
  useEffect(()=>{api<{demo_enabled:boolean;demo_password?:string;registration_available:boolean}>('/api/auth/config').then(x=>{setDemo(x.demo_enabled);setDemoPassword(x.demo_password||'');setMailReady(x.registration_available);}).catch(()=>setError('Cannot connect to the account service.'));},[]);
+ useEffect(()=>{const syncLink=()=>{const next=linkScreen();if(next==='login'&&!['verify','reset','invite'].includes(screen))return;setScreen(next);setError('');setMessage('');setPassword('');setConfirm('');};window.addEventListener('hashchange',syncLink);return()=>window.removeEventListener('hashchange',syncLink);},[screen]);
  function go(next:Screen){if(['verify','reset','invite'].includes(screen))window.history.replaceState({},'',window.location.pathname);setScreen(next);setError('');setMessage('');setCode('');setPassword('');setConfirm('');setChallenge('');}
- async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');setMessage('');
+ async function submit(e:React.FormEvent){e.preventDefault();const submittedUrl=window.location.href;setBusy(true);setError('');setMessage('');
   try{
    if(screen==='login'){const r=await login(email,password);setPassword('');if(r.challenge){setChallenge(r.challenge);setScreen('mfa');}}
    else if(screen==='mfa'){await completeMfa(challenge,code);setChallenge('');setCode('');}
    else if(screen==='signup'){if(password!==confirm)throw Error('Passwords do not match');const r=await post<{message:string}>('/api/auth/signup',{name,email,password});setMessage(r.message);setScreen('pending');setPassword('');setConfirm('');}
    else if(screen==='forgot'){const r=await post<{message:string}>('/api/auth/forgot-password',{email});setMessage(r.message);}
-   else if(screen==='reset'){if(password!==confirm)throw Error('Passwords do not match');const r=await post<{message:string}>('/api/auth/reset-password',{token:params.get('reset'),new_password:password});setMessage(r.message);setScreen('login');window.history.replaceState({},'',window.location.pathname);setPassword('');setConfirm('');}
-   else if(screen==='verify'){const r=await post<{message:string}>('/api/auth/verify-email',{token:params.get('verify'),password});setMessage(r.message);setScreen('login');setPassword('');window.history.replaceState({},'',window.location.pathname);}
-   else if(screen==='invite'){if(password!==confirm)throw Error('Passwords do not match');const r=await post<{message:string}>('/api/auth/accept-invitation',{token:params.get('invite'),password});setMessage(r.message);setScreen('login');window.history.replaceState({},'',window.location.pathname);setPassword('');setConfirm('');}
-  }catch(err){setError(err instanceof Error?err.message:'Request failed. Try again.');}finally{setBusy(false);}
+   else if(screen==='reset'){if(password!==confirm)throw Error('Passwords do not match');const token=linkParams().get('reset');if(!token||linkScreen()!=='reset')throw Error('Link is invalid or expired');const r=await post<{message:string}>('/api/auth/reset-password',{token,new_password:password});if(window.location.href!==submittedUrl)return;setMessage(r.message);setScreen('login');window.history.replaceState({},'',window.location.pathname);setPassword('');setConfirm('');}
+   else if(screen==='verify'){const token=linkParams().get('verify');if(!token||linkScreen()!=='verify')throw Error('Link is invalid or expired');const r=await post<{message:string}>('/api/auth/verify-email',{token,password});if(window.location.href!==submittedUrl)return;setMessage(r.message);setScreen('login');setPassword('');window.history.replaceState({},'',window.location.pathname);}
+   else if(screen==='invite'){if(password!==confirm)throw Error('Passwords do not match');const token=linkParams().get('invite');if(!token||linkScreen()!=='invite')throw Error('Link is invalid or expired');const r=await post<{message:string}>('/api/auth/accept-invitation',{token,password});if(window.location.href!==submittedUrl)return;setMessage(r.message);setScreen('login');window.history.replaceState({},'',window.location.pathname);setPassword('');setConfirm('');}
+  }catch(err){if(window.location.href===submittedUrl)setError(err instanceof Error?err.message:'Request failed. Try again.');}finally{setBusy(false);}
  }
  const passwordInput=(autofill:'current-password'|'new-password')=><div className="auth-password-field"><label htmlFor="auth-password">Password</label><input id="auth-password" type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={autofill==='new-password'?15:undefined} autoComplete={autofill} maxLength={1024}/><button type="button" className="auth-text-button" onClick={()=>setShowPassword(x=>!x)} aria-label={showPassword?'Hide password':'Show password'}>{showPassword?'Hide':'Show'}</button></div>;
  return <div className="login-layout"><div className="login-showcase"><div className="login-pattern"/><div className="showcase-content">

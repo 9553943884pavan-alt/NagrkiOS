@@ -1,6 +1,6 @@
 # Backend, database and storage review
 
-**Date:** 21 November 2026. The API route inventory in `backend/app/main.py` and `backend/app/account.py`, database adapter and schema, object storage adapter, migrations and associated tests were reviewed. All write tests used isolated SQLite demo fixtures; production PostgreSQL and object storage were not modified.
+**Date:** 21 November 2026. The API route inventory in `backend/app/main.py` and `backend/app/account.py`, database adapter and schema, object storage adapter, migrations and associated tests were reviewed. All write tests used isolated SQLite demo fixtures; production PostgreSQL and object storage were not modified. The original audit fix was subsequently deployed after the operator authorized a `main` push; the follow-up storage repair remains local pending integration.
 
 ## Confirmed repairs
 
@@ -9,6 +9,7 @@
 | F-01 | P2 | Complaint creation read an unclaimed attachment, then used an unconditional update; another request could claim it between those steps. | Owner-bound `UPDATE ... WHERE complaint_id IS NULL RETURNING` makes claim atomic; 409 causes transaction rollback. | Forced intervening claim test; backend 220 passed, 2 skipped |
 | F-02 | P2 | Demo reset deleted user rows before their pending staff invitations, violating the invitation's inviter foreign key. | Delete pending invitation rows first, inside the existing demo-only transaction. | Reset-with-invitation regression; backend 220 passed, 2 skipped |
 | F-07 | P1 | Pillow 12.3.0 decoded untrusted uploads despite critical/high advisories fixed only in 13.0.0. Cryptography 48.0.1 also had advisories and an upper bound below patched versions. | Require Pillow 13 and cryptography 50; restrict Pillow decoding to accepted PNG/JPEG/WEBP formats. | Updated local venv: 220 passed, 2 skipped; `pip-audit` 0 findings across 51 installed packages |
+| F-09 | P3 | A provider repeating an S3 continuation token could cause private-object reconciliation to loop indefinitely. | Track listing tokens and fail closed on repetition. | Two isolated pagination regressions; 39 focused DB/storage tests passed; follow-up change not yet deployed |
 
 The SQL adapter binds user values as parameters. Its `?` to `%s` SQL-text replacement is simplistic but no current static query demonstrated user-controlled SQL interpolation or injection. The attachment claim relies on PostgreSQL and SQLite `RETURNING`, both already used elsewhere in the application.
 
@@ -22,9 +23,10 @@ The SQL adapter binds user values as parameters. Its `?` to `%s` SQL-text replac
 ## Remaining risks and untested paths
 
 - **P2 delivery consistency:** `send_mail` is called before commit in several account flows. A provider-accepted email can outlive a failed database transaction. A durable outbox and idempotent worker would require a separate design and migration; no speculative rewrite was made.
+- Two additional mocked timeout regressions verify signup and invitation make exactly one Mailjet attempt and leave no committed link or invitation after an ambiguous failure. They do not eliminate the accepted-before-commit scenario. A migration-backed encrypted outbox design is described in `FINAL_REMEDIATION_REPORT.md`.
 - Production PostgreSQL transaction contention, index plans, connection-pool behavior, rollback after provider acceptance, and storage bucket policy were not load-tested here.
 - Local storage failure injection exists in backend tests, but no live Neon bucket write/read or orphan reconciliation was run during this audit.
 - Existing schema revision and production user data were not queried or altered in this audit. The earlier administrator bootstrap record is historical evidence only.
-- The patched dependency versions were installed and tested locally. The deployed Render versions were not read or changed; a separately approved deployment is required to address production exposure.
+- The patched dependency versions were installed and tested locally. Render reported deployment of the patched commit `ea68b35`, but its installed package inventory was not independently read; production version and exposure claims remain unverified.
 
 References: [PostgreSQL `UPDATE`](https://www.postgresql.org/docs/current/sql-update.html), [SQLite `RETURNING`](https://www.sqlite.org/lang_returning.html), [SQLAlchemy transactions](https://docs.sqlalchemy.org/en/20/core/connections.html#using-transactions), [OWASP API BOLA](https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/).

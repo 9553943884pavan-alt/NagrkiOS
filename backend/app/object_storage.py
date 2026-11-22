@@ -185,6 +185,7 @@ def list_attachment_keys() -> set[str]:
     bucket = os.environ['OBJECT_STORAGE_BUCKET']
     keys: set[str] = set()
     token = None
+    seen_tokens: set[str] = set()
     while True:
         arguments = {'Bucket': bucket, 'MaxKeys': 1000}
         if token:
@@ -196,5 +197,8 @@ def list_attachment_keys() -> set[str]:
         token = page.get('NextContinuationToken')
         if not token:
             raise RuntimeError('Incomplete private object listing')
+        if token in seen_tokens:
+            raise RuntimeError('Repeated private object listing token')
+        seen_tokens.add(token)
 
 
