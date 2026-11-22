@@ -27,6 +27,6 @@ The SQL adapter binds user values as parameters. Its `?` to `%s` SQL-text replac
 - Production PostgreSQL transaction contention, index plans, connection-pool behavior, rollback after provider acceptance, and storage bucket policy were not load-tested here.
 - Local storage failure injection exists in backend tests, but no live Neon bucket write/read or orphan reconciliation was run during this audit.
 - Existing schema revision and production user data were not queried or altered in this audit. The earlier administrator bootstrap record is historical evidence only.
-- The patched dependency versions were installed and tested locally. Render reported deployment of the patched commit `ea68b35`, but its installed package inventory was not independently read; production version and exposure claims remain unverified.
+- The patched dependency versions were installed and tested locally. An operator-provided screenshot of a successful Render deployment of merged commit `e8c8d7d` shows its build log installed Pillow 13.0.0 and cryptography 50.0.2. Runtime imports and exposure were not independently checked.
 
 References: [PostgreSQL `UPDATE`](https://www.postgresql.org/docs/current/sql-update.html), [SQLite `RETURNING`](https://www.sqlite.org/lang_returning.html), [SQLAlchemy transactions](https://docs.sqlalchemy.org/en/20/core/connections.html#using-transactions), [OWASP API BOLA](https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/).

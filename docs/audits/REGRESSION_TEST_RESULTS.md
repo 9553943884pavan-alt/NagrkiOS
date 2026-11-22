@@ -24,7 +24,7 @@ An earlier warm local built-preview Chromium sample on synthetic admin Overview 
 | Frontend `npm.cmd run typecheck` | Passed | TypeScript only |
 | Frontend WSL `npm run build` | Passed; Vite 6.4.6 transformed 2,297 modules | Final local build, no deployment |
 | `npm audit --audit-level=moderate --json` | Zero advisories among 141 installed dependencies | Local lockfile/install state |
-| `pip-audit` of installed backend venv | Initially 60 findings in Pillow, cryptography and local pip; **zero across 51 packages** after updates | Local environment; deployed package versions unverified |
+| `pip-audit` of installed backend venv | Initially 60 findings in Pillow, cryptography and local pip; **zero across 51 packages** after updates | Local environment; successful Render build log later confirmed Pillow 13.0.0 and cryptography 50.0.2, but runtime imports and a deployed-package audit remain unverified |
 | Synthetic Playwright officer case queue | Passed: officer action hidden, all filters cleared, stale result ignored, native link keyboard navigation | Mocked API; Chromium only |
 | Synthetic Playwright citizen New Grievance widths | Passed: document width equals viewport at 320, 390, 768 and 1024 px | Mocked API; Chromium only |
 | Independent isolated demo browser check | Citizen dashboard and Cases at 320 px had width 320; New Grievance initially 326 at 320, then fixed and rechecked above | Disposable SQLite and uploads; no real user data |
