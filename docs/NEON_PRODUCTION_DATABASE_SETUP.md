@@ -1,6 +1,6 @@
 # Sydney production PostgreSQL setup
 
-**Status, 21 November 2026 (Asia/Kolkata): initial schema migration complete; public deployment pending.** The owner approved the production backup and migration. The guarded migration was applied locally after a PostgreSQL 18 rehearsal. No production users or complaints were seeded.
+**Historical setup record, 21 November 2026 (Asia/Kolkata):** The sections below describe the state at initial schema migration. Render and Vercel were subsequently deployed, and the first production administrator was created once. See [current deployment checklist](FINAL_DEPLOYMENT_CHECKLIST.md) and [follow-up audit](audits/FINAL_REMEDIATION_REPORT.md) for current gates. The guarded migration was applied after a PostgreSQL 18 rehearsal; do not rerun it.
 
 ## Verified infrastructure
 

@@ -1,6 +1,6 @@
 # Full codebase audit
 
-**Date:** 21 November 2026 (Asia/Kolkata). **Baseline:** `cdfa02a7d43e478da49b16a5e43dba070cc003cb`. **Scope:** local repository, isolated demo tests, synthetic browser fixtures, and read-only health requests. No production data, secrets, deployment, or cloud settings were changed.
+**Date:** 21 November 2026 (Asia/Kolkata). **Baseline:** `cdfa02a7d43e478da49b16a5e43dba070cc003cb`. The original audit used isolated tests and read-only hosted checks. During the subsequent publication pass, the operator authorized a push to `main`; commit `ea68b3594cd25414a934815da07cffad0afaa7d8` was published and hosting automation deployed it. No production data, secrets, or cloud settings were changed directly.
 
 The repository was inventoried across `frontend`, `backend`, `.github/workflows`, deployment configuration, and existing documentation. Specialist reviews covered frontend behavior and visuals; API, database, and storage; infrastructure and integrations; and an independent QA pass. This is an evidence-based audit of tested paths, not a claim that every visual state or production integration was exercised.
 
@@ -23,9 +23,9 @@ The repository was inventoried across `frontend`, `backend`, `.github/workflows`
 | F-02 | P2 | Demo reset deleted users while pending staff invitations still referenced an inviter. | `backend/app/db.py`, `backend/tests/test_security.py` | `c0366c7` | Reset with pending invitation succeeds and clears it; backend suite 220 passed, 2 skipped | Fixed locally; validated |
 | F-03 | P2 | Global 360 px minimum width forced horizontal overflow at 320 px. | `frontend/src/styles.css` | `c0366c7` | Browser `scrollWidth` 360 before, 320 after; screenshots in frontend QA artifacts | Fixed locally; validated on login |
 | F-04 | P2 | Case-list state and semantics: officer action led to a redirect, All cases left filters active, stale responses could replace newer results, and table rows lacked native link behavior. | `frontend/src/pages/Cases.tsx`, `frontend/tests/cases-smoke.js` | `c0366c7` | Synthetic Playwright queue smoke passed all four assertions | Fixed locally; validated with fixtures |
-| F-05 | P2 | Manual demo credential cleanup lacked an explicit intent phrase before a destructive job. | `.github/workflows/disable-neon-demo.yml`, `backend/tests/test_production_target.py` | `c0366c7` | Targeted workflow tests 64 passed; actionlint 1.7.12 passed all three workflows; guard precedes install | Fixed locally; not deployed |
+| F-05 | P2 | Manual demo credential cleanup lacked an explicit intent phrase before a destructive job. | `.github/workflows/disable-neon-demo.yml`, `backend/tests/test_production_target.py` | `c0366c7` | Targeted workflow tests 64 passed; actionlint 1.7.12 passed all three workflows; guard precedes install | Published; workflow not dispatched |
 | F-06 | P2 | Forced Vite chart chunk was preloaded on the initial HTML even when chart pages were unused. | `frontend/src/App.tsx`, `frontend/vite.config.ts` | `c0366c7` | Build HTML no longer preloads charts; initial HTML-referenced JS gzip 247.52 to 117.65 KB | Fixed locally; build validated |
-| F-07 | P1 | `Pillow<13` retained 12.3.0 despite critical/high decoder advisories; uploads are decoded by Pillow. `cryptography<49` also retained advised 48.0.1. | `backend/requirements.txt`, `backend/app/main.py` | `c0366c7` | Upgraded local venv to Pillow 13.0.0 and cryptography 50.0.2; restricted accepted decoders; 220 tests passed, 2 skipped; `pip-audit` 0/51 after update | Fixed in local code; production update pending deployment |
+| F-07 | P1 | `Pillow<13` retained 12.3.0 despite critical/high decoder advisories; uploads are decoded by Pillow. `cryptography<49` also retained advised 48.0.1. | `backend/requirements.txt`, `backend/app/main.py` | `c0366c7` | Upgraded local venv to Pillow 13.0.0 and cryptography 50.0.2; restricted accepted decoders; 220 tests passed, 2 skipped; `pip-audit` 0/51 after update | Published and Render deploy succeeded; installed versions unverified |
 | F-08 | P2 | Citizen New Grievance voice controls extended to 326 px at a 320 px viewport. | `frontend/src/styles.css`, `frontend/tests/new-viewport-smoke.js` | `c0366c7` | Independent before measurement 326/320; after synthetic browser check 320/320, 390/390, 768/768, 1024/1024; screenshots | Fixed locally; validated |
 
 ## Residual and suspected issues
@@ -36,7 +36,7 @@ The repository was inventoried across `frontend`, `backend`, `.github/workflows`
 - **Operational blocker:** The protected demo credential cleanup workflow requires `DIRECT_URL`; the last environment-secret review found only `DATABASE_URL`. A future dispatch fails closed until the target is separately configured and approved.
 - **Unverified:** Deployed Python package versions, authenticated hosted browser flows, current Mailjet delivery, private object storage and live database writes, Firefox/WebKit, full WCAG 2.2 conformance, LCP/INP/CLS field metrics, and all route/state combinations. Local `npm audit` reported zero advisories; local `pip-audit` reported zero across 51 installed packages after the dependency update.
 
-The local code fixes are unpushed. Production deployment remains blocked pending separate approval. Detailed evidence and gates are in the other reports in this directory.
+The original fixes were published to `main` in the authorized follow-up. GitHub reports the Render deployment for `ea68b35` succeeded, and the hosted Vercel page references the same JS asset hash as the local release build. This does not establish the deployed Python dependency inventory or authenticated end-to-end behavior. Follow-up findings and release gates are in `FINAL_REMEDIATION_REPORT.md`.
 
 ## Reference standards
 
