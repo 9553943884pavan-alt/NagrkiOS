@@ -1,6 +1,6 @@
 # Backend, database and storage review
 
-**Date:** 21 November 2026. The API route inventory in `backend/app/main.py` and `backend/app/account.py`, database adapter and schema, object storage adapter, migrations and associated tests were reviewed. All write tests used isolated SQLite demo fixtures; production PostgreSQL and object storage were not modified. The original audit fix was subsequently deployed after the operator authorized a `main` push; the follow-up storage repair remains local pending integration.
+**Date:** 21–22 November 2026. The API route inventory in `backend/app/main.py` and `backend/app/account.py`, database adapter and schema, object storage adapter, migrations and associated tests were reviewed. All write tests used isolated SQLite demo fixtures; production PostgreSQL and object storage were not modified. Both audit fix batches were published to `main`; GitHub reported the merged Render deployment successful.
 
 ## Confirmed repairs
 
@@ -9,7 +9,7 @@
 | F-01 | P2 | Complaint creation read an unclaimed attachment, then used an unconditional update; another request could claim it between those steps. | Owner-bound `UPDATE ... WHERE complaint_id IS NULL RETURNING` makes claim atomic; 409 causes transaction rollback. | Forced intervening claim test; backend 220 passed, 2 skipped |
 | F-02 | P2 | Demo reset deleted user rows before their pending staff invitations, violating the invitation's inviter foreign key. | Delete pending invitation rows first, inside the existing demo-only transaction. | Reset-with-invitation regression; backend 220 passed, 2 skipped |
 | F-07 | P1 | Pillow 12.3.0 decoded untrusted uploads despite critical/high advisories fixed only in 13.0.0. Cryptography 48.0.1 also had advisories and an upper bound below patched versions. | Require Pillow 13 and cryptography 50; restrict Pillow decoding to accepted PNG/JPEG/WEBP formats. | Updated local venv: 220 passed, 2 skipped; `pip-audit` 0 findings across 51 installed packages |
-| F-09 | P3 | A provider repeating an S3 continuation token could cause private-object reconciliation to loop indefinitely. | Track listing tokens and fail closed on repetition. | Two isolated pagination regressions; 39 focused DB/storage tests passed; follow-up change not yet deployed |
+| F-09 | P3 | A provider repeating an S3 continuation token could cause private-object reconciliation to loop indefinitely. | Track listing tokens and fail closed on repetition. | Two isolated pagination regressions; 39 focused DB/storage tests passed; merged Render deployment succeeded; live bucket path untested |
 
 The SQL adapter binds user values as parameters. Its `?` to `%s` SQL-text replacement is simplistic but no current static query demonstrated user-controlled SQL interpolation or injection. The attachment claim relies on PostgreSQL and SQLite `RETURNING`, both already used elsewhere in the application.
 

@@ -1,6 +1,6 @@
 # Full codebase audit
 
-**Date:** 21 November 2026 (Asia/Kolkata). **Baseline:** `cdfa02a7d43e478da49b16a5e43dba070cc003cb`. The original audit used isolated tests and read-only hosted checks. During the subsequent publication pass, the operator authorized a push to `main`; commit `ea68b3594cd25414a934815da07cffad0afaa7d8` was published and hosting automation deployed it. No production data, secrets, or cloud settings were changed directly.
+**Date:** 21 November 2026 (Asia/Kolkata). **Baseline:** `cdfa02a7d43e478da49b16a5e43dba070cc003cb`. The original audit used isolated tests and read-only hosted checks. During the subsequent publication pass, the operator authorized a push to `main`; commit `ea68b3594cd25414a934815da07cffad0afaa7d8` was published and hosting automation deployed it. The follow-up batch later merged at `e8c8d7dbe9de679a3d6f0533b2df2cf88463eb54` and its Render deployment succeeded. The findings table below records the original audit's validation state; current status is in [the task board](AUDIT_TASK_BOARD.md). No production data, secrets, or cloud settings were changed directly.
 
 The repository was inventoried across `frontend`, `backend`, `.github/workflows`, deployment configuration, and existing documentation. Specialist reviews covered frontend behavior and visuals; API, database, and storage; infrastructure and integrations; and an independent QA pass. This is an evidence-based audit of tested paths, not a claim that every visual state or production integration was exercised.
 
